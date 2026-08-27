@@ -1,0 +1,28 @@
+{
+    "name": "Vitor Müller - Pecuária de Leite",
+    "short_name": "Vitor Müller",
+    "description": "Vitor Müller - Pecuária de Leite",
+    "start_url": "index.php",
+    "display": "standalone",
+    "background_color": "#FAF7F2",
+    "theme_color": "#B8860B",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "assets/images/logo.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "https://ui-avatars.com/api/?name=VM&background=B8860B&color=fff&size=192&rounded=true",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "https://ui-avatars.com/api/?name=VM&background=B8860B&color=fff&size=512&rounded=true",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
