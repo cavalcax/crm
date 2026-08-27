@@ -217,4 +217,50 @@ function buildClientEmbralWhatsAppMessage($client, $intentions = [])
     $msg .= "\n_Enviado via CRM Vitor Müller_";
     return $msg;
 }
+
+// Check if a client with the given phone number already exists
+function findClientByPhone($pdo, $phone, $excludeId = null)
+{
+    $phoneClean = preg_replace('/[^0-9]/', '', $phone);
+    if (strlen($phoneClean) < 8) {
+        return null;
+    }
+
+    try {
+        $sql = "SELECT id, name, phone, user_id FROM " . TABLE_NAME . "clients 
+                WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+', ''), '.', '') = ?";
+        $params = [$phoneClean];
+
+        if ($excludeId) {
+            $sql .= " AND id != ?";
+            $params[] = intval($excludeId);
+        }
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $found = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($found) {
+            return $found;
+        }
+
+        // Fallback search through records to match exact cleaned phone
+        $sqlFallback = "SELECT id, name, phone, user_id FROM " . TABLE_NAME . "clients";
+        if ($excludeId) {
+            $sqlFallback .= " WHERE id != " . intval($excludeId);
+        }
+        $stmt = $pdo->query($sqlFallback);
+        $all = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($all as $client) {
+            $dbClean = preg_replace('/[^0-9]/', '', $client['phone'] ?? '');
+            if (!empty($dbClean) && $dbClean === $phoneClean) {
+                return $client;
+            }
+        }
+    } catch (Exception $e) {
+        // Fallback error handling
+    }
+
+    return null;
+}
 ?>

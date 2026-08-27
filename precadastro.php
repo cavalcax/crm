@@ -42,6 +42,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($name)) {
         $error = "Por favor, informe seu nome.";
+    } elseif (empty($phone)) {
+        $error = "Por favor, informe seu telefone / WhatsApp.";
+    } elseif ($existingClient = findClientByPhone($pdo, $phone)) {
+        $error = "Já existe um cadastro com este número de telefone em nosso sistema. Se você já se cadastrou ou precisa atualizar seus dados, entre em contato conosco.";
     } else {
         try {
             $stmt = $pdo->prepare("
@@ -292,6 +296,7 @@ $states = getBrazilianStates();
                             <label class="block text-sm font-bold text-gray-700 mb-1">Telefone / WhatsApp *</label>
                             <input type="text" name="phone" id="phoneInput" required placeholder="(00) 00000-0000"
                                 class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                            <p id="phoneErrorMsg" class="text-red-600 text-xs font-bold mt-1.5 hidden"></p>
                         </div>
 
                         <div>
@@ -349,13 +354,68 @@ $states = getBrazilianStates();
         </div>
     </div>
 
-    <!-- Phone Mask Script -->
+    <!-- Phone Mask Script & Duplicate Check -->
     <script>
         const phoneInput = document.getElementById('phoneInput');
+        const phoneErrorMsgEl = document.getElementById('phoneErrorMsg');
+        const preCadastroForm = phoneInput ? phoneInput.closest('form') : null;
+        const submitBtnEl = preCadastroForm ? preCadastroForm.querySelector('button[type="submit"]') : null;
+        let isPhoneDuplicate = false;
+
+        async function checkPhoneDuplicate() {
+            if (!phoneInput) return;
+            const val = phoneInput.value.replace(/\D/g, '');
+            if (val.length < 8) {
+                if (phoneErrorMsgEl) phoneErrorMsgEl.classList.add('hidden');
+                if (submitBtnEl) {
+                    submitBtnEl.disabled = false;
+                    submitBtnEl.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+                isPhoneDuplicate = false;
+                return;
+            }
+
+            try {
+                const res = await fetch('api-check-phone.php?phone=' + encodeURIComponent(phoneInput.value));
+                const data = await res.json();
+                if (data.exists) {
+                    isPhoneDuplicate = true;
+                    if (phoneErrorMsgEl) {
+                        phoneErrorMsgEl.textContent = '⚠️ Este número de telefone já está cadastrado em nosso sistema.';
+                        phoneErrorMsgEl.classList.remove('hidden');
+                    }
+                    if (submitBtnEl) {
+                        submitBtnEl.disabled = true;
+                        submitBtnEl.classList.add('opacity-50', 'cursor-not-allowed');
+                    }
+                } else {
+                    isPhoneDuplicate = false;
+                    if (phoneErrorMsgEl) phoneErrorMsgEl.classList.add('hidden');
+                    if (submitBtnEl) {
+                        submitBtnEl.disabled = false;
+                        submitBtnEl.classList.remove('opacity-50', 'cursor-not-allowed');
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
         if (phoneInput) {
             phoneInput.addEventListener('input', function (e) {
                 let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
                 e.target.value = !x[2] ? x[1] : '(' + x[1] + ') ' + x[2] + (x[3] ? '-' + x[3] : '');
+                checkPhoneDuplicate();
+            });
+            phoneInput.addEventListener('blur', checkPhoneDuplicate);
+        }
+
+        if (preCadastroForm) {
+            preCadastroForm.addEventListener('submit', function (e) {
+                if (isPhoneDuplicate) {
+                    e.preventDefault();
+                    alert('Não é possível enviar. Este número de telefone já possui cadastro em nosso sistema.');
+                }
             });
         }
     </script>

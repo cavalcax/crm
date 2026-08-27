@@ -6,6 +6,8 @@ requireLogin();
 $user_id = $_SESSION['user_id'];
 $pageTitle = 'Novo Cliente';
 
+$error = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = sanitize($_POST['name']);
     $farm_name = sanitize($_POST['farm_name'] ?? '');
@@ -28,7 +30,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $animal_count_range = sanitize($_POST['animal_count_range'] ?? '');
     $milk_production_range = sanitize($_POST['milk_production_range'] ?? '');
 
-    if ($name) {
+    if (empty($name)) {
+        $error = "Por favor, informe o nome do cliente.";
+    } elseif (!empty($phone) && ($existingClient = findClientByPhone($pdo, $phone))) {
+        $error = "Já existe um cliente cadastrado com este telefone: " . formatPhone($phone) . " (" . htmlspecialchars($existingClient['name']) . "). Não é possível cadastrar em duplicidade.";
+    } else {
         $stmt = $pdo->prepare("
             INSERT INTO " . TABLE_NAME . "clients (
                 user_id, uf, city, name, farm_name, phone, email, address, latitude, longitude,
@@ -114,6 +120,12 @@ $states = getBrazilianStates();
                         </a>
                     </div>
 
+                    <?php if (!empty($error)): ?>
+                        <div class="mb-6 p-4 bg-red-100 border-l-4 border-red-500 text-red-700 font-medium rounded shadow-sm">
+                            <?php echo $error; ?>
+                        </div>
+                    <?php endif; ?>
+
                     <form method="POST" id="clientForm">
                         <h3 class="text-lg font-bold text-brand-900 mb-4 pb-2 border-b border-gray-200">1. Dados
                             Principais</h3>
@@ -152,6 +164,7 @@ $states = getBrazilianStates();
                                 <label class="block text-gray-700 text-sm font-bold mb-2">Telefone / WhatsApp</label>
                                 <input type="text" name="phone" id="phoneInput"
                                     class="shadow-sm appearance-none border border-gray-300 rounded w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                <p id="phoneErrorMsg" class="text-red-600 text-xs font-bold mt-1.5 hidden"></p>
                             </div>
                             <div>
                                 <label class="block text-gray-700 text-sm font-bold mb-2">E-mail</label>
@@ -394,12 +407,71 @@ $states = getBrazilianStates();
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBaWNV6Gc1D-0ZNrGBXxEe2qwbcw4OhDFo&callback=initMap&libraries=places&v=weekly"
         async></script>
 
-    <!-- Phone Mask Script -->
+    <!-- Phone Mask Script & Duplicate Check -->
     <script>
         document.querySelector('input[name="phone"]').addEventListener('input', function (e) {
             let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
             e.target.value = !x[2] ? x[1] : '(' + x[1] + ') ' + x[2] + (x[3] ? '-' + x[3] : '');
         });
+
+        const phoneInputEl = document.getElementById('phoneInput');
+        const phoneErrorMsgEl = document.getElementById('phoneErrorMsg');
+        const clientFormEl = document.getElementById('clientForm');
+        const submitBtnEl = clientFormEl ? clientFormEl.querySelector('button[type="submit"]') : null;
+        let isPhoneDuplicate = false;
+
+        async function checkPhoneDuplicate() {
+            if (!phoneInputEl) return;
+            const val = phoneInputEl.value.replace(/\D/g, '');
+            if (val.length < 8) {
+                if (phoneErrorMsgEl) phoneErrorMsgEl.classList.add('hidden');
+                if (submitBtnEl) {
+                    submitBtnEl.disabled = false;
+                    submitBtnEl.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+                isPhoneDuplicate = false;
+                return;
+            }
+
+            try {
+                const res = await fetch('../api-check-phone.php?phone=' + encodeURIComponent(phoneInputEl.value));
+                const data = await res.json();
+                if (data.exists) {
+                    isPhoneDuplicate = true;
+                    if (phoneErrorMsgEl) {
+                        phoneErrorMsgEl.textContent = `⚠️ Este telefone já está cadastrado para: ${data.client.name}`;
+                        phoneErrorMsgEl.classList.remove('hidden');
+                    }
+                    if (submitBtnEl) {
+                        submitBtnEl.disabled = true;
+                        submitBtnEl.classList.add('opacity-50', 'cursor-not-allowed');
+                    }
+                } else {
+                    isPhoneDuplicate = false;
+                    if (phoneErrorMsgEl) phoneErrorMsgEl.classList.add('hidden');
+                    if (submitBtnEl) {
+                        submitBtnEl.disabled = false;
+                        submitBtnEl.classList.remove('opacity-50', 'cursor-not-allowed');
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        if (phoneInputEl) {
+            phoneInputEl.addEventListener('input', checkPhoneDuplicate);
+            phoneInputEl.addEventListener('blur', checkPhoneDuplicate);
+        }
+
+        if (clientFormEl) {
+            clientFormEl.addEventListener('submit', function (e) {
+                if (isPhoneDuplicate) {
+                    e.preventDefault();
+                    alert('Não é possível cadastrar. Este número de telefone já pertence a outro cliente.');
+                }
+            });
+        }
     </script>
 </body>
 
