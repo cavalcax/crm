@@ -236,7 +236,8 @@ $statusFilterParam = $_GET['status'] ?? '';
                                             data-name="<?php echo htmlspecialchars(mb_strtolower($client['name'], 'UTF-8')); ?>"
                                             data-date="<?php echo !empty($client['created_at']) ? strtotime($client['created_at']) : (int) $client['id']; ?>"
                                             data-city="<?php echo htmlspecialchars(mb_strtolower(($client['city'] ?? '') . ' ' . ($client['uf'] ?? ''), 'UTF-8')); ?>"
-                                            data-status="<?php echo htmlspecialchars(mb_strtolower($client['status'] ?? '', 'UTF-8')); ?>">
+                                            data-status="<?php echo htmlspecialchars(mb_strtolower($client['status'] ?? '', 'UTF-8')); ?>"
+                                            data-phone="<?php echo preg_replace('/[^0-9]/', '', $client['phone'] ?? ''); ?>">
                                             <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                                                 <div class="flex items-center">
                                                     <div class="flex-shrink-0 mr-3">
@@ -526,6 +527,65 @@ $statusFilterParam = $_GET['status'] ?? '';
         let currentSort = '<?php echo htmlspecialchars($sort); ?>';
         let currentOrder = '<?php echo htmlspecialchars($order); ?>';
 
+        const STORAGE_KEY_STATUS = 'crm_clients_filter_status';
+        const STORAGE_KEY_SEARCH = 'crm_clients_filter_search';
+        const STORAGE_KEY_PER_PAGE = 'crm_clients_filter_per_page';
+
+        function normalizeText(str) {
+            if (!str) return '';
+            return str.toString()
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim();
+        }
+
+        function matchPhone(rawDigits, formattedText, searchRaw) {
+            if (!rawDigits && !formattedText) return false;
+
+            const searchDigits = (searchRaw || '').replace(/\D/g, '');
+            if (searchDigits.length >= 3) {
+                // Remove Brazilian country code 55 if present in search (e.g. +55 51 9969-5383 -> 555199695383 -> 5199695383)
+                let searchWithout55 = searchDigits;
+                if (searchDigits.startsWith('55') && searchDigits.length >= 10) {
+                    searchWithout55 = searchDigits.substring(2);
+                }
+
+                let rowDigits = (rawDigits || '').replace(/\D/g, '');
+                if (rowDigits.startsWith('55') && rowDigits.length >= 12) {
+                    rowDigits = rowDigits.substring(2);
+                }
+
+                if (rowDigits) {
+                    if (rowDigits.includes(searchDigits)) return true;
+                    if (rowDigits.includes(searchWithout55)) return true;
+                    if (searchDigits.includes(rowDigits)) return true;
+                    if (('55' + rowDigits).includes(searchDigits)) return true;
+
+                    // Handle 8-digit vs 9-digit numbers (DDD + 8 digits vs DDD + 9 digits)
+                    if (rowDigits.length === 11 && searchWithout55.length === 10) {
+                        const ddd = rowDigits.substring(0, 2);
+                        const rest = rowDigits.substring(3);
+                        if ((ddd + rest).includes(searchWithout55)) return true;
+                    }
+                    if (rowDigits.length === 10 && searchWithout55.length === 11) {
+                        const ddd = searchWithout55.substring(0, 2);
+                        const rest = searchWithout55.substring(3);
+                        if (rowDigits.includes(ddd + rest)) return true;
+                    }
+                }
+            }
+
+            // Direct substring in formatted text (e.g. searching "9969-5383" or "(51)")
+            const normSearch = normalizeText(searchRaw);
+            const normFormatted = normalizeText(formattedText);
+            if (normFormatted && normFormatted.includes(normSearch)) {
+                return true;
+            }
+
+            return false;
+        }
+
         function updateSortIcons() {
             const sortHeaders = document.querySelectorAll('.sort-header');
             sortHeaders.forEach(header => {
@@ -538,7 +598,7 @@ $statusFilterParam = $_GET['status'] ?? '';
                 } else {
                     header.classList.remove('bg-brand-100', 'text-brand-900');
                     iconSpan.className = 'sort-icon text-gray-400 text-xs ml-1';
-                    iconSpan.textContent = '↕';
+                    iconSpan.textContent = '⇅';
                 }
             });
         }
@@ -583,26 +643,28 @@ $statusFilterParam = $_GET['status'] ?? '';
             const searchInput = document.getElementById('searchInput');
             const statusFilter = document.getElementById('statusFilter');
 
-            const searchText = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const searchRaw = searchInput ? searchInput.value.trim() : '';
+            const searchNorm = normalizeText(searchRaw);
             const selectedStatus = statusFilter ? statusFilter.value.toLowerCase().trim() : '';
             const rows = Array.from(document.querySelectorAll('.client-row'));
 
             return rows.filter(row => {
-                const name = row.querySelector('.client-name') ? row.querySelector('.client-name').textContent.toLowerCase() : '';
-                const farm = row.querySelector('.client-farm') ? row.querySelector('.client-farm').textContent.toLowerCase() : '';
-                const date = row.querySelector('.client-date') ? row.querySelector('.client-date').textContent.toLowerCase() : '';
-                const phone = row.querySelector('.client-phone') ? row.querySelector('.client-phone').textContent.toLowerCase().replace(/[^0-9]/g, '') : '';
-                const phoneFormatted = row.querySelector('.client-phone') ? row.querySelector('.client-phone').textContent.toLowerCase() : '';
-                const email = row.querySelector('.client-email') ? row.querySelector('.client-email').textContent.toLowerCase().trim() : '';
-                const location = row.querySelector('.client-location') ? row.querySelector('.client-location').textContent.toLowerCase() : '';
+                const name = normalizeText(row.querySelector('.client-name') ? row.querySelector('.client-name').textContent : '');
+                const farm = normalizeText(row.querySelector('.client-farm') ? row.querySelector('.client-farm').textContent : '');
+                const date = normalizeText(row.querySelector('.client-date') ? row.querySelector('.client-date').textContent : '');
+                const email = normalizeText(row.querySelector('.client-email') ? row.querySelector('.client-email').textContent : '');
+                const location = normalizeText(row.querySelector('.client-location') ? row.querySelector('.client-location').textContent : '');
                 const statusEl = row.querySelector('.client-status');
-                const status = statusEl ? statusEl.textContent.toLowerCase().trim() : '';
+                const status = normalizeText(statusEl ? statusEl.textContent : '');
+
+                const phoneDigits = row.getAttribute('data-phone') || '';
+                const phoneFormatted = row.querySelector('.client-phone') ? row.querySelector('.client-phone').textContent : '';
 
                 // Status match logic
                 let statusMatches = true;
                 if (selectedStatus !== '') {
                     if (selectedStatus === 'novo') {
-                        statusMatches = status.includes('novo') || status.includes('pré-cadastro') || status.includes('precadastro');
+                        statusMatches = status.includes('novo') || status.includes('pre-cadastro') || status.includes('precadastro');
                     } else if (selectedStatus === 'atendido') {
                         statusMatches = status.includes('atendido');
                     } else if (selectedStatus === 'embral') {
@@ -616,17 +678,16 @@ $statusFilterParam = $_GET['status'] ?? '';
                     }
                 }
 
-                // Text search match logic
+                // Text & Phone search match logic
                 let textMatches = true;
-                if (searchText !== '') {
-                    textMatches = name.includes(searchText) ||
-                        farm.includes(searchText) ||
-                        date.includes(searchText) ||
-                        phone.includes(searchText) ||
-                        phoneFormatted.includes(searchText) ||
-                        email.includes(searchText) ||
-                        location.includes(searchText) ||
-                        status.includes(searchText);
+                if (searchNorm !== '') {
+                    textMatches = name.includes(searchNorm) ||
+                        farm.includes(searchNorm) ||
+                        date.includes(searchNorm) ||
+                        email.includes(searchNorm) ||
+                        location.includes(searchNorm) ||
+                        status.includes(searchNorm) ||
+                        matchPhone(phoneDigits, phoneFormatted, searchRaw);
                 }
 
                 return statusMatches && textMatches;
@@ -776,9 +837,77 @@ $statusFilterParam = $_GET['status'] ?? '';
             btnContainer.appendChild(nextBtn);
         }
 
+        function syncFilterStorageAndUrl() {
+            const statusSelect = document.getElementById('statusFilter');
+            const searchInput = document.getElementById('searchInput');
+
+            const statusVal = statusSelect ? statusSelect.value : '';
+            const searchVal = searchInput ? searchInput.value.trim() : '';
+
+            sessionStorage.setItem(STORAGE_KEY_STATUS, statusVal);
+            sessionStorage.setItem(STORAGE_KEY_SEARCH, searchVal);
+
+            const url = new URL(window.location);
+            if (statusVal) {
+                url.searchParams.set('status', statusVal);
+            } else {
+                url.searchParams.delete('status');
+            }
+
+            if (searchVal) {
+                url.searchParams.set('q', searchVal);
+            } else {
+                url.searchParams.delete('q');
+            }
+
+            window.history.replaceState({}, '', url);
+        }
+
         function onFiltersChanged() {
-            currentPage = 1; // Reset to first page whenever search or filter changes
+            syncFilterStorageAndUrl();
+            currentPage = 1;
             renderPagination();
+        }
+
+        function initFilters() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const statusSelect = document.getElementById('statusFilter');
+            const searchInput = document.getElementById('searchInput');
+            const perPageSelect = document.getElementById('perPageSelect');
+
+            // 1. Status Filter:
+            if (urlParams.has('status')) {
+                const st = urlParams.get('status');
+                if (statusSelect) statusSelect.value = st;
+                sessionStorage.setItem(STORAGE_KEY_STATUS, st);
+            } else {
+                const savedStatus = sessionStorage.getItem(STORAGE_KEY_STATUS);
+                if (savedStatus !== null && statusSelect) {
+                    statusSelect.value = savedStatus;
+                }
+            }
+
+            // 2. Search Text:
+            if (urlParams.has('q')) {
+                const q = urlParams.get('q');
+                if (searchInput) searchInput.value = q;
+                sessionStorage.setItem(STORAGE_KEY_SEARCH, q);
+            } else {
+                const savedSearch = sessionStorage.getItem(STORAGE_KEY_SEARCH);
+                if (savedSearch !== null && searchInput) {
+                    searchInput.value = savedSearch;
+                }
+            }
+
+            // 3. Per Page:
+            const savedPerPage = sessionStorage.getItem(STORAGE_KEY_PER_PAGE);
+            if (savedPerPage !== null && perPageSelect) {
+                perPageSelect.value = savedPerPage;
+                perPage = savedPerPage;
+            }
+
+            // Update URL to match current restored state
+            syncFilterStorageAndUrl();
         }
 
         document.querySelectorAll('.sort-header').forEach(header => {
@@ -798,11 +927,13 @@ $statusFilterParam = $_GET['status'] ?? '';
         document.getElementById('statusFilter').addEventListener('change', onFiltersChanged);
         document.getElementById('perPageSelect').addEventListener('change', function () {
             perPage = this.value;
+            sessionStorage.setItem(STORAGE_KEY_PER_PAGE, perPage);
             currentPage = 1;
             renderPagination();
         });
 
-        // Initialize sort icons and pagination on load
+        // Initialize state, sort icons and pagination on load
+        initFilters();
         updateSortIcons();
         renderPagination();
     </script>

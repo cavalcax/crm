@@ -197,32 +197,47 @@ $isSentEmbral = (isset($_GET['sent']) && $_GET['sent'] === 'embral');
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div class="border border-gray-200 p-3 rounded-lg bg-gray-50">
-                    <p class="text-xs font-bold text-amber-800 uppercase">1. Condição de Pagamento Desejada</p>
+                    <p class="text-xs font-bold text-amber-800 uppercase">Condição de Pagamento Desejada</p>
                     <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars($client['payment_condition'] ?: '-'); ?></p>
                 </div>
 
                 <div class="border border-gray-200 p-3 rounded-lg bg-gray-50">
-                    <p class="text-xs font-bold text-amber-800 uppercase">2. Raças de Interesse</p>
+                    <p class="text-xs font-bold text-amber-800 uppercase">Interesse em Adquirir</p>
                     <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars($client['breed_interests'] ?: '-'); ?></p>
                 </div>
 
                 <div class="border border-gray-200 p-3 rounded-lg bg-gray-50">
-                    <p class="text-xs font-bold text-amber-800 uppercase">3. Produtor de Leite?</p>
-                    <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars($client['is_milk_producer'] ?: '-'); ?></p>
-                </div>
-
-                <div class="border border-gray-200 p-3 rounded-lg bg-gray-50">
-                    <p class="text-xs font-bold text-amber-800 uppercase">4. Motivo da Aquisição</p>
+                    <p class="text-xs font-bold text-amber-800 uppercase">Motivo da Aquisição</p>
                     <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars($client['acquisition_reason'] ?: '-'); ?></p>
                 </div>
 
                 <div class="border border-gray-200 p-3 rounded-lg bg-gray-50">
-                    <p class="text-xs font-bold text-amber-800 uppercase">5. Quantidade de Animais Possuídos</p>
-                    <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars($client['animal_count_range'] ?: '-'); ?></p>
+                    <p class="text-xs font-bold text-amber-800 uppercase">Qtd. Animais Necessários</p>
+                    <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars(($client['purchase_animal_count'] ?? '') ?: '-'); ?></p>
                 </div>
 
                 <div class="border border-gray-200 p-3 rounded-lg bg-gray-50">
-                    <p class="text-xs font-bold text-amber-800 uppercase">6. Produção Diária de Leite</p>
+                    <p class="text-xs font-bold text-amber-800 uppercase">Categorias de Animais Desejadas</p>
+                    <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars(($client['animal_categories'] ?? '') ?: '-'); ?></p>
+                </div>
+
+                <div class="border border-gray-200 p-3 rounded-lg bg-gray-50">
+                    <p class="text-xs font-bold text-amber-800 uppercase">Sistema de Produção</p>
+                    <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars(($client['production_system'] ?? '') ?: '-'); ?></p>
+                </div>
+
+                <div class="border border-gray-200 p-3 rounded-lg bg-gray-50">
+                    <p class="text-xs font-bold text-amber-800 uppercase">Produtor de Leite?</p>
+                    <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars($client['is_milk_producer'] ?: '-'); ?></p>
+                </div>
+
+                <div class="border border-gray-200 p-3 rounded-lg bg-gray-50">
+                    <p class="text-xs font-bold text-amber-800 uppercase">Quantidade de Animais Possuídos</p>
+                    <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars($client['animal_count_range'] ?: '-'); ?></p>
+                </div>
+
+                <div class="border border-gray-200 p-3 rounded-lg bg-gray-50 sm:col-span-2">
+                    <p class="text-xs font-bold text-amber-800 uppercase">Produção Diária de Leite</p>
                     <p class="font-semibold text-gray-900 mt-1"><?php echo htmlspecialchars($client['milk_production_range'] ?: '-'); ?></p>
                 </div>
             </div>

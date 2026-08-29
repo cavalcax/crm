@@ -402,43 +402,55 @@ $categories = $stmt->fetchAll();
 
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">1. Condição de
-                                Pagamento</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Condição de Pagamento</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
                                 <?php echo htmlspecialchars($client['payment_condition'] ?: '-'); ?></p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">2. Raças de Interesse
-                            </p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Interesse em Adquirir</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
                                 <?php echo htmlspecialchars($client['breed_interests'] ?: '-'); ?></p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">3. Produtor de Leite
-                            </p>
-                            <p class="text-base font-semibold text-gray-800 mt-1">
-                                <?php echo htmlspecialchars($client['is_milk_producer'] ?: '-'); ?></p>
-                        </div>
-
-                        <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">4. Motivo da Aquisição
-                            </p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Motivo da Aquisição</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
                                 <?php echo htmlspecialchars($client['acquisition_reason'] ?: '-'); ?></p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">5. Quantidade de
-                                Animais</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Qtd. Animais Necessários</p>
+                            <p class="text-base font-semibold text-gray-800 mt-1">
+                                <?php echo htmlspecialchars($client['purchase_animal_count'] ?? '-') ?: '-'; ?></p>
+                        </div>
+
+                        <div class="bg-brand-50 p-4 rounded-lg border border-brand-100 lg:col-span-2">
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Categorias de Animais Desejadas</p>
+                            <p class="text-base font-semibold text-gray-800 mt-1">
+                                <?php echo htmlspecialchars($client['animal_categories'] ?? '-') ?: '-'; ?></p>
+                        </div>
+
+                        <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Sistema de Produção</p>
+                            <p class="text-base font-semibold text-gray-800 mt-1">
+                                <?php echo htmlspecialchars($client['production_system'] ?? '-') ?: '-'; ?></p>
+                        </div>
+
+                        <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Produtor de Leite</p>
+                            <p class="text-base font-semibold text-gray-800 mt-1">
+                                <?php echo htmlspecialchars($client['is_milk_producer'] ?: '-'); ?></p>
+                        </div>
+
+                        <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Quantidade de Animais Possuídos</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
                                 <?php echo htmlspecialchars($client['animal_count_range'] ?: '-'); ?></p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">6. Produção Diária de
-                                Leite</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Produção Diária de Leite</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
                                 <?php echo htmlspecialchars($client['milk_production_range'] ?: '-'); ?></p>
                         </div>

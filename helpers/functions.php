@@ -141,6 +141,9 @@ function buildClientApprovalWelcomeMessage($client)
 
     $payment = trim($client['payment_condition'] ?? '') ?: '-';
     $breeds = trim($client['breed_interests'] ?? '') ?: '-';
+    $purchaseCount = trim($client['purchase_animal_count'] ?? '');
+    $categories = trim($client['animal_categories'] ?? '');
+    $prodSystem = trim($client['production_system'] ?? '');
     $isMilkProducer = trim($client['is_milk_producer'] ?? '') ?: '-';
     $reason = trim($client['acquisition_reason'] ?? '') ?: '-';
     $animalCount = trim($client['animal_count_range'] ?? '') ?: '-';
@@ -154,9 +157,20 @@ function buildClientApprovalWelcomeMessage($client)
     }
     $msg .= "*Localização:* {$locStr}\n";
     $msg .= "*Condição de Pagamento:* {$payment}\n";
-    $msg .= "*Raças de Interesse:* {$breeds}\n";
+    $msg .= "*Interesse em Adquirir:* {$breeds}\n";
+    if (!empty($reason) && $reason !== '-') {
+        $msg .= "*Motivo da Aquisição:* {$reason}\n";
+    }
+    if (!empty($purchaseCount)) {
+        $msg .= "*Qtd. Necessária:* {$purchaseCount}\n";
+    }
+    if (!empty($categories)) {
+        $msg .= "*Categorias Desejadas:* {$categories}\n";
+    }
+    if (!empty($prodSystem)) {
+        $msg .= "*Sistema de Produção:* {$prodSystem}\n";
+    }
     $msg .= "*Produtor de Leite:* {$isMilkProducer}\n";
-    $msg .= "*Motivo da Aquisição:* {$reason}\n";
     $msg .= "*Quantidade de Animais:* {$animalCount}\n";
     $msg .= "*Produção Diária de Leite:* {$milkProd}\n\n";
 
@@ -180,6 +194,9 @@ function buildClientEmbralWhatsAppMessage($client, $intentions = [])
 
     $payment = trim($client['payment_condition'] ?? '') ?: '-';
     $breeds = trim($client['breed_interests'] ?? '') ?: '-';
+    $purchaseCount = trim($client['purchase_animal_count'] ?? '');
+    $categories = trim($client['animal_categories'] ?? '');
+    $prodSystem = trim($client['production_system'] ?? '');
     $isMilkProducer = trim($client['is_milk_producer'] ?? '') ?: '-';
     $reason = trim($client['acquisition_reason'] ?? '') ?: '-';
     $animalCount = trim($client['animal_count_range'] ?? '') ?: '-';
@@ -198,9 +215,20 @@ function buildClientEmbralWhatsAppMessage($client, $intentions = [])
     }
     $msg .= "*Localização:* {$locStr}\n";
     $msg .= "*Condição de Pagamento:* {$payment}\n";
-    $msg .= "*Raças de Interesse:* {$breeds}\n";
+    $msg .= "*Interesse em Adquirir:* {$breeds}\n";
+    if (!empty($reason) && $reason !== '-') {
+        $msg .= "*Motivo da Aquisição:* {$reason}\n";
+    }
+    if (!empty($purchaseCount)) {
+        $msg .= "*Qtd. Necessária:* {$purchaseCount}\n";
+    }
+    if (!empty($categories)) {
+        $msg .= "*Categorias Desejadas:* {$categories}\n";
+    }
+    if (!empty($prodSystem)) {
+        $msg .= "*Sistema de Produção:* {$prodSystem}\n";
+    }
     $msg .= "*Produtor de Leite:* {$isMilkProducer}\n";
-    $msg .= "*Motivo da Aquisição:* {$reason}\n";
     $msg .= "*Quantidade de Animais:* {$animalCount}\n";
     $msg .= "*Produção Diária de Leite:* {$milkProd}\n";
 

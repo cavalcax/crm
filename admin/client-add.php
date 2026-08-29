@@ -25,6 +25,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $raw_breeds = $_POST['breed_interests'] ?? [];
     $breed_interests = is_array($raw_breeds) ? implode(', ', array_map('sanitize', $raw_breeds)) : sanitize($raw_breeds);
 
+    $purchase_animal_count = sanitize($_POST['purchase_animal_count'] ?? '');
+    $raw_categories = $_POST['animal_categories'] ?? [];
+    $animal_categories = is_array($raw_categories) ? implode(', ', array_map('sanitize', $raw_categories)) : sanitize($raw_categories);
+
+    $production_system_opt = sanitize($_POST['production_system'] ?? '');
+    $production_system_other = sanitize($_POST['production_system_other'] ?? '');
+    $production_system = ($production_system_opt === 'Outro') ? ($production_system_other ? 'Outro: ' . $production_system_other : 'Outro') : $production_system_opt;
+
     $is_milk_producer = sanitize($_POST['is_milk_producer'] ?? '');
     $acquisition_reason = sanitize($_POST['acquisition_reason'] ?? '');
     $animal_count_range = sanitize($_POST['animal_count_range'] ?? '');
@@ -39,8 +47,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             INSERT INTO " . TABLE_NAME . "clients (
                 user_id, uf, city, name, farm_name, phone, email, address, latitude, longitude,
                 status, is_potential, payment_condition, breed_interests,
+                purchase_animal_count, animal_categories, production_system,
                 is_milk_producer, acquisition_reason, animal_count_range, milk_production_range
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $user_id,
@@ -57,6 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $is_potential,
             $payment_condition,
             $breed_interests,
+            $purchase_animal_count,
+            $animal_categories,
+            $production_system,
             $is_milk_producer,
             $acquisition_reason,
             $animal_count_range,
@@ -115,13 +127,17 @@ $states = getBrazilianStates();
                         </div>
                         <a href="clients.php"
                             class="text-gray-600 hover:text-gray-900 text-sm font-semibold flex items-center gap-1">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                            </svg>
                             Voltar
                         </a>
                     </div>
 
                     <?php if (!empty($error)): ?>
-                        <div class="mb-6 p-4 bg-red-100 border-l-4 border-red-500 text-red-700 font-medium rounded shadow-sm">
+                        <div
+                            class="mb-6 p-4 bg-red-100 border-l-4 border-red-500 text-red-700 font-medium rounded shadow-sm">
                             <?php echo $error; ?>
                         </div>
                     <?php endif; ?>
@@ -273,12 +289,51 @@ $states = getBrazilianStates();
                                 </select>
                             </div>
 
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Qtd. de Animais que Necessita Adquirir</label>
+                                <input type="text" name="purchase_animal_count"
+                                    placeholder="Ex: 10 animais ou 15 a 20 cabeças"
+                                    class="shadow-sm appearance-none border border-gray-300 rounded w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Sistema de Produção</label>
+                                <input type="text" name="production_system"
+                                    placeholder="Ex: Pasto, Compost Barn, Free Stall..."
+                                    class="shadow-sm appearance-none border border-gray-300 rounded w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            </div>
+
                             <div class="md:col-span-2">
-                                <label class="block text-gray-700 text-sm font-bold mb-2">Raças de Interesse (Múltipla
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Categorias de Animais Desejadas (Múltipla Seleção)</label>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-brand-50 p-4 rounded-lg border border-brand-100">
+                                    <?php
+                                    $categories_list = [
+                                        'Bezerras de 0 a 3 meses',
+                                        'Bezerras de 3 a 6 meses',
+                                        'Bezerras de 6 a 12 meses',
+                                        'Bezerras acima de 12 meses inseminadas',
+                                        'Novilhas prenhas, com gestação de 2 a 5 meses',
+                                        'Novilhas prenhas, com gestação superior a 5 meses',
+                                        'Vacas primeira cria (primeira numeral)',
+                                        'Vacas segunda cria (segunda numeral)',
+                                        'Vacas terceira cria (terceira numeral)'
+                                    ];
+                                    foreach ($categories_list as $cat): ?>
+                                        <label class="flex items-center cursor-pointer">
+                                            <input type="checkbox" name="animal_categories[]" value="<?php echo $cat; ?>"
+                                                class="h-4 w-4 text-brand-500 rounded focus:ring-brand-500 border-gray-300">
+                                            <span class="ml-2 text-xs text-gray-700 font-medium"><?php echo $cat; ?></span>
+                                        </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Raças de Interesse / Máquinas (Múltipla
                                     Seleção)</label>
                                 <div
                                     class="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-brand-50 p-4 rounded-lg border border-brand-100">
-                                    <?php foreach (['Jersey', 'Holandês', 'Gersolando', 'Girolando', 'Gir', 'Máquinas'] as $breed): ?>
+                                    <?php foreach (['Jersey', 'Holandês', 'Jersolando', 'Girolando', 'Gir', 'Máquinas'] as $breed): ?>
                                         <label class="flex items-center cursor-pointer">
                                             <input type="checkbox" name="breed_interests[]" value="<?php echo $breed; ?>"
                                                 class="h-4 w-4 text-brand-500 rounded focus:ring-brand-500 border-gray-300">

@@ -464,11 +464,64 @@ $statusFilterParam = $_GET['status'] ?? '';
                 }
             }
         }
+                function normalizeText(str) {
+            if (!str) return '';
+            return str.toString()
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim();
+        }
+
+        function matchPhone(rawDigits, formattedText, searchRaw) {
+            if (!rawDigits && !formattedText) return false;
+
+            const searchDigits = (searchRaw || '').replace(/\D/g, '');
+            if (searchDigits.length >= 3) {
+                let searchWithout55 = searchDigits;
+                if (searchDigits.startsWith('55') && searchDigits.length >= 10) {
+                    searchWithout55 = searchDigits.substring(2);
+                }
+
+                let rowDigits = (rawDigits || '').replace(/\D/g, '');
+                if (rowDigits.startsWith('55') && rowDigits.length >= 12) {
+                    rowDigits = rowDigits.substring(2);
+                }
+
+                if (rowDigits) {
+                    if (rowDigits.includes(searchDigits)) return true;
+                    if (rowDigits.includes(searchWithout55)) return true;
+                    if (searchDigits.includes(rowDigits)) return true;
+                    if (('55' + rowDigits).includes(searchDigits)) return true;
+
+                    if (rowDigits.length === 11 && searchWithout55.length === 10) {
+                        const ddd = rowDigits.substring(0, 2);
+                        const rest = rowDigits.substring(3);
+                        if ((ddd + rest).includes(searchWithout55)) return true;
+                    }
+                    if (rowDigits.length === 10 && searchWithout55.length === 11) {
+                        const ddd = searchWithout55.substring(0, 2);
+                        const rest = searchWithout55.substring(3);
+                        if (rowDigits.includes(ddd + rest)) return true;
+                    }
+                }
+            }
+
+            const normSearch = normalizeText(searchRaw);
+            const normFormatted = normalizeText(formattedText);
+            if (normFormatted && normFormatted.includes(normSearch)) {
+                return true;
+            }
+
+            return false;
+        }
+
         function filterRows() {
             const searchInput = document.getElementById('searchInput');
             const statusFilter = document.getElementById('statusFilter');
 
-            const searchText = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const searchRaw = searchInput ? searchInput.value.trim() : '';
+            const searchNorm = normalizeText(searchRaw);
             const selectedStatus = statusFilter ? statusFilter.value.toLowerCase().trim() : '';
             const rows = document.querySelectorAll('.client-row');
             let hasVisible = false;
@@ -481,19 +534,19 @@ $statusFilterParam = $_GET['status'] ?? '';
                 const locationEl = row.querySelector('.client-location');
                 const statusEl = row.querySelector('.client-status');
 
-                const name = nameEl ? nameEl.textContent.toLowerCase() : '';
-                const farm = farmEl ? farmEl.textContent.toLowerCase() : '';
-                const phone = phoneEl ? phoneEl.textContent.toLowerCase().replace(/[^0-9]/g, '') : '';
-                const phoneFormatted = phoneEl ? phoneEl.textContent.toLowerCase() : '';
-                const email = emailEl ? emailEl.textContent.toLowerCase().trim() : '';
-                const location = locationEl ? locationEl.textContent.toLowerCase() : '';
-                const status = statusEl ? statusEl.textContent.toLowerCase().trim() : '';
+                const name = normalizeText(nameEl ? nameEl.textContent : '');
+                const farm = normalizeText(farmEl ? farmEl.textContent : '');
+                const phoneDigits = phoneEl ? phoneEl.textContent.replace(/\D/g, '') : '';
+                const phoneFormatted = phoneEl ? phoneEl.textContent : '';
+                const email = normalizeText(emailEl ? emailEl.textContent : '');
+                const location = normalizeText(locationEl ? locationEl.textContent : '');
+                const status = normalizeText(statusEl ? statusEl.textContent : '');
 
                 // Status match logic
                 let statusMatches = true;
                 if (selectedStatus !== '') {
                     if (selectedStatus === 'novo') {
-                        statusMatches = status.includes('novo') || status.includes('pré-cadastro') || status.includes('precadastro');
+                        statusMatches = status.includes('novo') || status.includes('pre-cadastro') || status.includes('precadastro');
                     } else if (selectedStatus === 'atendido') {
                         statusMatches = status.includes('atendido');
                     } else if (selectedStatus === 'embral') {
@@ -507,16 +560,15 @@ $statusFilterParam = $_GET['status'] ?? '';
                     }
                 }
 
-                // Text search match logic
+                // Text & Phone search match logic
                 let textMatches = true;
-                if (searchText !== '') {
-                    textMatches = name.includes(searchText) ||
-                        farm.includes(searchText) ||
-                        phone.includes(searchText) ||
-                        phoneFormatted.includes(searchText) ||
-                        email.includes(searchText) ||
-                        location.includes(searchText) ||
-                        status.includes(searchText);
+                if (searchNorm !== '') {
+                    textMatches = name.includes(searchNorm) ||
+                        farm.includes(searchNorm) ||
+                        email.includes(searchNorm) ||
+                        location.includes(searchNorm) ||
+                        status.includes(searchNorm) ||
+                        matchPhone(phoneDigits, phoneFormatted, searchRaw);
                 }
 
                 if (statusMatches && textMatches) {

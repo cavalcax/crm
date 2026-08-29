@@ -46,6 +46,15 @@ try {
         if (!in_array('farm_name', $columns)) {
             $pdo->exec("ALTER TABLE " . TABLE_NAME . "clients ADD COLUMN farm_name VARCHAR(255) NULL");
         }
+        if (!in_array('purchase_animal_count', $columns)) {
+            $pdo->exec("ALTER TABLE " . TABLE_NAME . "clients ADD COLUMN purchase_animal_count VARCHAR(100) NULL");
+        }
+        if (!in_array('animal_categories', $columns)) {
+            $pdo->exec("ALTER TABLE " . TABLE_NAME . "clients ADD COLUMN animal_categories TEXT NULL");
+        }
+        if (!in_array('production_system', $columns)) {
+            $pdo->exec("ALTER TABLE " . TABLE_NAME . "clients ADD COLUMN production_system VARCHAR(255) NULL");
+        }
         if (!in_array('created_at', $columns)) {
             $pdo->exec("ALTER TABLE " . TABLE_NAME . "clients ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
         }
