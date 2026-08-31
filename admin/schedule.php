@@ -177,12 +177,18 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
                                     </h3>
                                     <?php if ($event['client_name']): ?>
                                     <p class="text-sm text-gray-600 flex items-center mt-1 event-client">
-                                        <svg class="w-4 h-4 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="w-4 h-4 mr-1 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z">
                                             </path>
                                         </svg>
-                                        <?php echo htmlspecialchars($event['client_name']); ?>
+                                        <?php if (!empty($event['client_id'])): ?>
+                                            <a href="client-details.php?id=<?php echo $event['client_id']; ?>" class="text-brand-700 hover:text-brand-900 font-semibold hover:underline">
+                                                <?php echo htmlspecialchars($event['client_name']); ?>
+                                            </a>
+                                        <?php else: ?>
+                                            <?php echo htmlspecialchars($event['client_name']); ?>
+                                        <?php endif; ?>
                                     </p>
                                     <?php endif; ?>
 

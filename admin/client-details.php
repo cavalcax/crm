@@ -86,6 +86,10 @@ $stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "categories WHERE user_id 
 $stmt->execute([$user_id]);
 $categories = $stmt->fetchAll();
 
+// Fetch Schedules for this client
+$stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "schedule WHERE client_id = ? AND user_id = ? ORDER BY start_time DESC");
+$stmt->execute([$client_id, $user_id]);
+$clientSchedules = $stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -340,6 +344,18 @@ $categories = $stmt->fetchAll();
                                     </a>
                                 <?php endif; ?>
 
+                                <!-- Agendar Compromisso -->
+                                <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>"
+                                    class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5"
+                                    title="Agendar Compromisso com este Cliente">
+                                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                                        </path>
+                                    </svg>
+                                    Agendar
+                                </a>
+
                                 <!-- PDF -->
                                 <a href="client-pdf.php?id=<?php echo $client['id']; ?>" target="_blank"
                                     class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5"
@@ -381,6 +397,78 @@ $categories = $stmt->fetchAll();
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Agenda / Compromissos vinculados -->
+                <div class="bg-white rounded-xl shadow-md p-6 mb-6 border-l-4 border-amber-600">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-brand-900 flex items-center">
+                            <span class="p-2 bg-amber-100 rounded-full mr-2 text-amber-700">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                                    </path>
+                                </svg>
+                            </span>
+                            Agenda / Compromissos (<?php echo count($clientSchedules); ?>)
+                        </h3>
+                        <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>"
+                            class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs hover:-translate-y-0.5">
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                            </svg>
+                            Agendar Novo
+                        </a>
+                    </div>
+
+                    <?php if (count($clientSchedules) > 0): ?>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <?php foreach ($clientSchedules as $cs): 
+                                $csDate = new DateTime($cs['start_time']);
+                                $csTypeLabels = ['meeting' => 'Reunião', 'visit' => 'Visita', 'auction' => 'Leilão', 'other' => 'Outro'];
+                                $csTypeClass = match($cs['type']) {
+                                    'meeting' => 'bg-blue-100 text-blue-800 border-blue-300',
+                                    'visit' => 'bg-emerald-100 text-emerald-800 border-emerald-300',
+                                    'auction' => 'bg-amber-100 text-amber-800 border-amber-300',
+                                    default => 'bg-purple-100 text-purple-800 border-purple-300'
+                                };
+                            ?>
+                                <div class="bg-brand-50 p-4 rounded-xl border border-brand-100 hover:shadow-md transition">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <span class="text-xs font-bold px-2 py-0.5 rounded-full border <?php echo $csTypeClass; ?>">
+                                            <?php echo $csTypeLabels[$cs['type']] ?? 'Outro'; ?>
+                                        </span>
+                                        <a href="schedule-edit.php?id=<?php echo $cs['id']; ?>" class="text-xs font-semibold text-brand-700 hover:text-brand-900 hover:underline">
+                                            Editar
+                                        </a>
+                                    </div>
+                                    <h4 class="font-bold text-gray-900 text-sm mb-1"><?php echo htmlspecialchars($cs['title']); ?></h4>
+                                    <p class="text-xs text-gray-600 flex items-center mb-1">
+                                        <svg class="w-3.5 h-3.5 mr-1 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                        <?php echo $csDate->format('d/m/Y \à\s H:i'); ?>
+                                    </p>
+                                    <?php if (!empty($cs['city']) || !empty($cs['uf'])): ?>
+                                        <p class="text-xs text-gray-500 flex items-center mb-1">
+                                            <svg class="w-3.5 h-3.5 mr-1 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                            </svg>
+                                            <?php echo htmlspecialchars(implode(' - ', array_filter([$cs['city'], $cs['uf']]))); ?>
+                                        </p>
+                                    <?php endif; ?>
+                                    <?php if (!empty($cs['observation'])): ?>
+                                        <p class="text-xs text-gray-600 italic mt-2 line-clamp-2">"<?php echo htmlspecialchars($cs['observation']); ?>"</p>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <p class="text-sm text-gray-500 italic bg-brand-50 p-4 rounded-lg border border-brand-100">
+                            Nenhum compromisso agendado com este cliente ainda. 
+                            <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>" class="text-brand-700 font-bold hover:underline ml-1">Clique aqui para agendar</a>.
+                        </p>
+                    <?php endif; ?>
                 </div>
 
                 <!-- Perfil Comercial -->

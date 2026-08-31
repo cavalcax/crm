@@ -386,6 +386,15 @@ $statusFilterParam = $_GET['status'] ?? '';
                                                         </svg>
                                                     </a>
 
+                                                    <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>"
+                                                        class="text-amber-600 hover:text-amber-800" title="Agendar Compromisso">
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                                                            </path>
+                                                        </svg>
+                                                    </a>
+
                                                     <a href="client-pdf.php?id=<?php echo $client['id']; ?>" target="_blank"
                                                         class="text-red-500 hover:text-red-700"
                                                         title="Gerar PDF / Imprimir Ficha">

@@ -11,18 +11,157 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_potential'])) 
     $client_id_to_toggle = $_POST['client_id'];
     $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET is_potential = IF(is_potential=1, 0, 1) WHERE id = ? AND user_id = ?");
     $stmt->execute([$client_id_to_toggle, $user_id]);
-    header("Location: map-selector.php");
+    $redirectUrl = 'map-selector.php' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : '');
+    header("Location: " . $redirectUrl);
     exit;
 }
 
-// Fetch Clients
-$stmt = $pdo->prepare("
-    SELECT c.* 
+// Multi-select and scalar filters parsing
+$status_filters = isset($_GET['status']) ? (is_array($_GET['status']) ? array_filter(array_map('sanitize', $_GET['status'])) : (trim($_GET['status']) !== '' ? [sanitize($_GET['status'])] : [])) : [];
+$uf_filters = isset($_GET['uf']) ? (is_array($_GET['uf']) ? array_filter(array_map('sanitize', $_GET['uf'])) : (trim($_GET['uf']) !== '' ? [sanitize($_GET['uf'])] : [])) : [];
+$breed_filters = isset($_GET['breed']) ? (is_array($_GET['breed']) ? array_filter(array_map('sanitize', $_GET['breed'])) : (trim($_GET['breed']) !== '' ? [sanitize($_GET['breed'])] : [])) : [];
+$animal_cat_filters = isset($_GET['animal_categories']) ? (is_array($_GET['animal_categories']) ? array_filter(array_map('sanitize', $_GET['animal_categories'])) : (trim($_GET['animal_categories']) !== '' ? [sanitize($_GET['animal_categories'])] : [])) : [];
+$prod_system_filters = isset($_GET['production_system']) ? (is_array($_GET['production_system']) ? array_filter(array_map('sanitize', $_GET['production_system'])) : (trim($_GET['production_system']) !== '' ? [sanitize($_GET['production_system'])] : [])) : [];
+$payment_filters = isset($_GET['payment']) ? (is_array($_GET['payment']) ? array_filter(array_map('sanitize', $_GET['payment'])) : (trim($_GET['payment']) !== '' ? [sanitize($_GET['payment'])] : [])) : [];
+$category_id_filters = isset($_GET['category_id']) ? (is_array($_GET['category_id']) ? array_filter(array_map('intval', $_GET['category_id'])) : (!empty($_GET['category_id']) ? [intval($_GET['category_id'])] : [])) : [];
+
+$potential_filter = isset($_GET['is_potential']) ? sanitize($_GET['is_potential']) : '';
+$type_filter = isset($_GET['type']) ? sanitize($_GET['type']) : 'all'; // 'buy' or 'sell'
+$producer_filter = isset($_GET['producer']) ? sanitize($_GET['producer']) : '';
+$search_filter = isset($_GET['q']) ? sanitize($_GET['q']) : '';
+
+// Build dynamic query for clients
+$query = "
+    SELECT DISTINCT c.* 
     FROM " . TABLE_NAME . "clients c 
-    WHERE c.user_id = ? 
-    ORDER BY c.is_potential DESC, c.name ASC
-");
-$stmt->execute([$user_id]);
+    LEFT JOIN " . TABLE_NAME . "intentions i ON i.client_id = c.id
+    WHERE c.user_id = :user_id
+";
+
+$params = [':user_id' => $user_id];
+
+// Search filter (text)
+if (!empty($search_filter)) {
+    $query .= " AND (c.name LIKE :search OR c.farm_name LIKE :search OR c.phone LIKE :search OR c.email LIKE :search OR c.city LIKE :search)";
+    $params[':search'] = '%' . $search_filter . '%';
+}
+
+// Status multi-filter
+if (!empty($status_filters)) {
+    $statusConditions = [];
+    $sIdx = 0;
+    foreach ($status_filters as $st) {
+        if ($st === 'Novo') {
+            $statusConditions[] = "(c.status = 'Novo' OR c.status = 'Pré-cadastro')";
+        } else {
+            $pKey = ":status_" . $sIdx++;
+            $statusConditions[] = "c.status = " . $pKey;
+            $params[$pKey] = $st;
+        }
+    }
+    if (!empty($statusConditions)) {
+        $query .= " AND (" . implode(" OR ", $statusConditions) . ")";
+    }
+}
+
+// Potential filter
+if ($potential_filter !== '') {
+    $query .= " AND c.is_potential = :is_potential";
+    $params[':is_potential'] = intval($potential_filter);
+}
+
+// UF multi-filter
+if (!empty($uf_filters)) {
+    $ufPlaceholders = [];
+    $ufIdx = 0;
+    foreach ($uf_filters as $uf) {
+        $pKey = ":uf_" . $ufIdx++;
+        $ufPlaceholders[] = $pKey;
+        $params[$pKey] = $uf;
+    }
+    $query .= " AND c.uf IN (" . implode(", ", $ufPlaceholders) . ")";
+}
+
+// Breed multi-filter
+if (!empty($breed_filters)) {
+    $breedConditions = [];
+    $bIdx = 0;
+    foreach ($breed_filters as $b) {
+        $pKey = ":breed_" . $bIdx++;
+        $breedConditions[] = "c.breed_interests LIKE " . $pKey;
+        $params[$pKey] = '%' . $b . '%';
+    }
+    $query .= " AND (" . implode(" OR ", $breedConditions) . ")";
+}
+
+// Animal Categories multi-filter
+if (!empty($animal_cat_filters)) {
+    $catConditions = [];
+    $acIdx = 0;
+    foreach ($animal_cat_filters as $ac) {
+        $pKey = ":anim_cat_" . $acIdx++;
+        $catConditions[] = "c.animal_categories LIKE " . $pKey;
+        $params[$pKey] = '%' . $ac . '%';
+    }
+    $query .= " AND (" . implode(" OR ", $catConditions) . ")";
+}
+
+// Production System multi-filter
+if (!empty($prod_system_filters)) {
+    $psConditions = [];
+    $psIdx = 0;
+    foreach ($prod_system_filters as $ps) {
+        $pKey = ":prod_sys_" . $psIdx++;
+        if ($ps === 'Outro') {
+            $psConditions[] = "(c.production_system LIKE 'Outro%' OR c.production_system = 'Outro')";
+        } else {
+            $psConditions[] = "c.production_system LIKE " . $pKey;
+            $params[$pKey] = '%' . $ps . '%';
+        }
+    }
+    $query .= " AND (" . implode(" OR ", $psConditions) . ")";
+}
+
+// Payment Condition multi-filter
+if (!empty($payment_filters)) {
+    $payPlaceholders = [];
+    $payIdx = 0;
+    foreach ($payment_filters as $pay) {
+        $pKey = ":pay_" . $payIdx++;
+        $payPlaceholders[] = $pKey;
+        $params[$pKey] = $pay;
+    }
+    $query .= " AND c.payment_condition IN (" . implode(", ", $payPlaceholders) . ")";
+}
+
+// Milk Producer filter
+if ($producer_filter !== '') {
+    $query .= " AND c.is_milk_producer = :producer";
+    $params[':producer'] = $producer_filter;
+}
+
+// Intention Category multi-filter
+if (!empty($category_id_filters)) {
+    $catIdPlaceholders = [];
+    $cidIdx = 0;
+    foreach ($category_id_filters as $cid) {
+        $pKey = ":cat_id_" . $cidIdx++;
+        $catIdPlaceholders[] = $pKey;
+        $params[$pKey] = intval($cid);
+    }
+    $query .= " AND i.category_id IN (" . implode(", ", $catIdPlaceholders) . ")";
+}
+
+// Intention Type filter (buy/sell)
+if ($type_filter !== 'all' && !empty($type_filter)) {
+    $query .= " AND i.type = :type";
+    $params[':type'] = $type_filter;
+}
+
+$query .= " ORDER BY c.is_potential DESC, c.name ASC";
+
+$stmt = $pdo->prepare($query);
+$stmt->execute($params);
 $clients = $stmt->fetchAll();
 
 // Fetch Future Auctions for Map Selection with valid location coordinates
@@ -42,7 +181,40 @@ $stmtAuc = $pdo->prepare("
 $stmtAuc->execute([$user_id]);
 $auctions = $stmtAuc->fetchAll();
 
-$statusFilterParam = $_GET['status'] ?? '';
+// Fetch Options for multi-selects
+$states = getBrazilianStates();
+$allBreeds = getStandardBreeds();
+$allAnimalCats = getStandardAnimalCategories();
+$allProdSystems = getStandardProductionSystems();
+$allPayments = getStandardPaymentConditions();
+$allStatuses = getStandardClientStatuses();
+
+// Format states as 'UF - Nome'
+$ufOptions = [];
+foreach ($states as $code => $stateName) {
+    $ufOptions[$code] = $code . ' - ' . $stateName;
+}
+
+// Fetch user categories for intentions
+$stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "categories WHERE user_id = ? ORDER BY name ASC");
+$stmt->execute([$user_id]);
+$categories = $stmt->fetchAll();
+$categoryOptions = [];
+foreach ($categories as $c) {
+    $categoryOptions[$c['id']] = $c['name'];
+}
+
+// Active filters count
+$hasActiveFilters = !empty($status_filters) || !empty($uf_filters) || !empty($breed_filters) || 
+                     !empty($animal_cat_filters) || !empty($prod_system_filters) || !empty($payment_filters) || 
+                     !empty($category_id_filters) || $potential_filter !== '' || ($type_filter !== 'all' && !empty($type_filter)) || 
+                     $producer_filter !== '' || !empty($search_filter);
+
+$activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_filters) + 
+                     count($animal_cat_filters) + count($prod_system_filters) + count($payment_filters) + 
+                     count($category_id_filters) + ($potential_filter !== '' ? 1 : 0) + 
+                     (($type_filter !== 'all' && !empty($type_filter)) ? 1 : 0) + 
+                     ($producer_filter !== '' ? 1 : 0) + (!empty($search_filter) ? 1 : 0);
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -81,24 +253,149 @@ $statusFilterParam = $_GET['status'] ?? '';
         <?php include '../components/sidebar.php'; ?>
         <div class="flex-1 flex flex-col min-h-screen overflow-hidden">
             <?php include '../components/header.php'; ?>
-            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-brand-50 p-6 pb-28">
+            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-brand-50 p-4 sm:p-6 pb-28">
 
-                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <!-- Header Title -->
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
                     <div>
-                        <h1 class="text-3xl font-bold text-brand-900">Mapa de Clientes</h1>
+                        <h1 class="text-2xl sm:text-3xl font-bold text-brand-900">Mapa de Clientes e Leilões</h1>
+                        <p class="text-xs sm:text-sm text-gray-500 mt-0.5">Filtre, selecione os clientes e visualize no mapa georreferenciado</p>
+                    </div>
+                    <?php if ($hasActiveFilters): ?>
+                        <a href="map-selector.php"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-200 hover:bg-gray-300 text-gray-700 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            Limpar Filtros (<?php echo $activeFilterCount; ?>)
+                        </a>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Complete Filter Section (Accordion / Card) -->
+                <div class="mb-6 bg-white rounded-xl shadow-md border border-brand-100 relative z-20 overflow-visible">
+                    <button type="button" onclick="toggleAccordion('filterAccordionContent', 'filterChevron')"
+                        class="w-full bg-gradient-to-r from-brand-700 to-brand-800 rounded-t-xl px-5 py-3.5 flex items-center justify-between text-white hover:from-brand-800 hover:to-brand-900 transition text-left cursor-pointer select-none">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">🔍</span>
+                            <h2 class="text-sm sm:text-base font-bold tracking-wide">Filtros de Clientes</h2>
+                            <?php if ($activeFilterCount > 0): ?>
+                                <span class="bg-brand-400 text-brand-900 text-xs font-extrabold px-2.5 py-0.5 rounded-full ml-1">
+                                    <?php echo $activeFilterCount; ?> ativo(s)
+                                </span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="hidden sm:inline text-xs text-brand-100 font-medium">Clique para expandir/recolher filtros</span>
+                            <svg id="filterChevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </div>
+                    </button>
+
+                    <div id="filterAccordionContent" class="p-5 sm:p-6 border-t border-brand-100 overflow-visible">
+                        <form method="GET" action="map-selector.php" id="mapFilterForm" class="space-y-4">
+                            <!-- Top Search Bar -->
+                            <div class="relative">
+                                <label class="block text-xs font-bold text-gray-700 mb-1">Busca Geral (Nome, Fazenda, Telefone, Cidade...)</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                        </svg>
+                                    </span>
+                                    <input type="text" name="q" value="<?php echo htmlspecialchars($search_filter); ?>"
+                                        class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm"
+                                        placeholder="Ex: João, Fazenda Boa Vista, (19) 99999-9999, Campinas...">
+                                </div>
+                            </div>
+
+                            <!-- Grid with all multi-select & selector filters -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <!-- 1. Status do Cliente (Multi-select) -->
+                                <?php echo renderMultiSelect('status', 'Status do Cliente', $allStatuses, $status_filters, 'Todos Status'); ?>
+
+                                <!-- 2. Cliente em Potencial (Single select) -->
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1">Cliente em Potencial</label>
+                                    <select name="is_potential" class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                                        <option value="">Todos</option>
+                                        <option value="1" <?php echo $potential_filter === '1' ? 'selected' : ''; ?>>⭐ Somente em Potencial</option>
+                                        <option value="0" <?php echo $potential_filter === '0' ? 'selected' : ''; ?>>Outros</option>
+                                    </select>
+                                </div>
+
+                                <!-- 3. UF / Estados (Multi-select with Search) -->
+                                <?php echo renderMultiSelect('uf', 'UF (Estado)', $ufOptions, $uf_filters, 'Todos os Estados', true); ?>
+
+                                <!-- 4. Raças / Máquinas (Multi-select) -->
+                                <?php echo renderMultiSelect('breed', 'Raça / Máquinas', $allBreeds, $breed_filters, 'Todas as Raças'); ?>
+
+                                <!-- 5. Categorias de Animais (Multi-select with Search) -->
+                                <?php echo renderMultiSelect('animal_categories', 'Categoria de Animais', $allAnimalCats, $animal_cat_filters, 'Todas as Categorias', true); ?>
+
+                                <!-- 6. Tipo / Sistema de Produção (Multi-select) -->
+                                <?php echo renderMultiSelect('production_system', 'Tipo de Produção', $allProdSystems, $prod_system_filters, 'Todos os Tipos'); ?>
+
+                                <!-- 7. Condição de Pagamento (Multi-select) -->
+                                <?php echo renderMultiSelect('payment', 'Condição de Pagamento', $allPayments, $payment_filters, 'Todas as Condições'); ?>
+
+                                <!-- 8. Produtor de Leite (Single select) -->
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1">Produtor de Leite?</label>
+                                    <select name="producer" class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                                        <option value="">Todos</option>
+                                        <option value="Sim" <?php echo $producer_filter === 'Sim' ? 'selected' : ''; ?>>Sim</option>
+                                        <option value="Não" <?php echo $producer_filter === 'Não' ? 'selected' : ''; ?>>Não</option>
+                                    </select>
+                                </div>
+
+                                <!-- 9. Categoria de Intenção (Multi-select) -->
+                                <?php echo renderMultiSelect('category_id', 'Categoria de Intenção', $categoryOptions, $category_id_filters, 'Todas as Intenções'); ?>
+
+                                <!-- 10. Tipo de Intenção (Single select) -->
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1">Tipo de Intenção</label>
+                                    <select name="type" class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                                        <option value="all" <?php echo $type_filter == 'all' ? 'selected' : ''; ?>>Todos</option>
+                                        <option value="buy" <?php echo $type_filter == 'buy' ? 'selected' : ''; ?>>🛒 Compra</option>
+                                        <option value="sell" <?php echo $type_filter == 'sell' ? 'selected' : ''; ?>>💰 Venda</option>
+                                    </select>
+                                </div>
+
+                                <!-- Action Buttons -->
+                                <div class="sm:col-span-2 flex items-end gap-2 pt-1">
+                                    <button type="submit"
+                                        class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 px-5 rounded-lg shadow-md transition transform hover:-translate-y-0.5 active:translate-y-0 text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+                                        </svg>
+                                        Aplicar Filtros
+                                    </button>
+                                    <?php if ($hasActiveFilters): ?>
+                                        <a href="map-selector.php"
+                                            class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2.5 px-4 rounded-lg transition text-xs sm:text-sm flex items-center justify-center">
+                                            Limpar
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </form>
                     </div>
                 </div>
 
+                <!-- Form to generate map view with selected clients and auctions -->
                 <form action="view-map.php" method="POST" id="mapForm">
 
                     <?php if (!empty($auctions)): ?>
                         <!-- Future Auctions Selection Section with Accordion -->
-                        <div class="mb-8 bg-white shadow-md rounded-xl overflow-hidden border border-red-200">
+                        <div class="mb-6 bg-white shadow-md rounded-xl overflow-hidden border border-red-200">
                             <button type="button" onclick="toggleAccordion('auctionsAccordionContent', 'auctionsChevron')"
                                 class="w-full bg-gradient-to-r from-red-700 to-red-800 px-5 py-3.5 flex items-center justify-between text-white hover:from-red-800 hover:to-red-900 transition text-left cursor-pointer select-none">
                                 <div class="flex items-center gap-2">
                                     <span class="text-lg">🔨</span>
-                                    <h2 class="text-base font-bold tracking-wide">Leilões Programados (Futuros com Localização)</h2>
+                                    <h2 class="text-sm sm:text-base font-bold tracking-wide">Leilões Programados (Futuros com Localização)</h2>
                                     <span class="bg-white/20 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full ml-1">
                                         <?php echo count($auctions); ?>
                                     </span>
@@ -179,13 +476,13 @@ $statusFilterParam = $_GET['status'] ?? '';
                             class="w-full bg-gradient-to-r from-brand-800 to-brand-900 px-5 py-3.5 flex items-center justify-between text-white hover:from-brand-900 hover:to-brand-950 transition text-left cursor-pointer select-none">
                             <div class="flex items-center gap-2">
                                 <span class="text-lg">👥</span>
-                                <h2 class="text-base font-bold tracking-wide">Clientes Cadastrados</h2>
-                                <span class="bg-white/20 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full ml-1">
+                                <h2 class="text-sm sm:text-base font-bold tracking-wide">Clientes Encontrados</h2>
+                                <span class="bg-white/20 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full ml-1" id="clientCountBadge">
                                     <?php echo count($clients); ?>
                                 </span>
                             </div>
                             <div class="flex items-center gap-3">
-                                <span class="hidden sm:inline text-xs text-brand-100 font-medium">Selecione os clientes para exibir no mapa</span>
+                                <span class="hidden sm:inline text-xs text-brand-100 font-medium">Marque os clientes para exibir no mapa</span>
                                 <svg id="clientsChevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                 </svg>
@@ -193,77 +490,53 @@ $statusFilterParam = $_GET['status'] ?? '';
                         </button>
 
                         <div id="clientsAccordionContent" class="p-5">
-                            <!-- Search & Status Filter (65% Search, 35% Status) -->
-                            <div class="mb-6 flex gap-2 sm:gap-4 items-center">
-                                <div class="relative w-[65%]">
-                                    <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 sm:pl-3 pointer-events-none">
-                                        <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <!-- Instant Filter Bar for loaded table rows -->
+                            <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                <div class="relative w-full sm:w-80">
+                                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                         </svg>
                                     </span>
                                     <input type="text" id="searchInput"
-                                        class="w-full pl-8 sm:pl-10 pr-2.5 sm:pr-4 py-2 sm:py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm bg-white text-xs sm:text-sm"
-                                        placeholder="Buscar por nome, fazenda, telefone, cidade, UF...">
+                                        class="w-full pl-9 pr-3 py-1.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-xs bg-white text-xs sm:text-sm"
+                                        placeholder="Filtrar rapidamente nesta lista...">
                                 </div>
-
-                                <div class="w-[35%]">
-                                    <div class="relative">
-                                        <select id="statusFilter"
-                                            class="w-full pl-2 sm:pl-3 pr-6 sm:pr-8 py-2 sm:py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm bg-white font-medium text-gray-700 text-xs sm:text-sm appearance-none cursor-pointer truncate">
-                                            <option value="" <?php echo empty($statusFilterParam) ? 'selected' : ''; ?>>Todos Status</option>
-                                            <option value="Novo" <?php echo in_array($statusFilterParam, ['Novo', 'Pré-cadastro']) ? 'selected' : ''; ?>>🟡 Novos</option>
-                                            <option value="Atendido" <?php echo $statusFilterParam === 'Atendido' ? 'selected' : ''; ?>>🟣 Atendidos</option>
-                                            <option value="Embral" <?php echo $statusFilterParam === 'Embral' ? 'selected' : ''; ?>>🔵 Embral</option>
-                                            <option value="Ativo" <?php echo $statusFilterParam === 'Ativo' ? 'selected' : ''; ?>>🟢 Ativos</option>
-                                            <option value="Inativo" <?php echo $statusFilterParam === 'Inativo' ? 'selected' : ''; ?>>⚫ Inativos</option>
-                                        </select>
-                                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 sm:px-2.5 text-gray-500">
-                                            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                            </svg>
-                                        </div>
-                                    </div>
+                                <div class="flex items-center gap-2 text-xs font-semibold text-gray-600">
+                                    <span>Legenda:</span>
+                                    <span class="inline-flex items-center gap-1 text-amber-600 font-medium">⚠️ Sem coordenadas</span>
+                                    <span class="inline-flex items-center gap-1 text-amber-500 font-medium">⭐ Potencial</span>
                                 </div>
                             </div>
 
                             <div class="overflow-x-auto rounded-lg border border-gray-200">
                                 <table class="min-w-full leading-normal" id="clientsTable">
                                     <thead>
-                                        <tr>
-                                            <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-center w-12">
+                                        <tr class="bg-gray-100/90 text-gray-700 border-b border-gray-200">
+                                            <th class="px-5 py-3 text-center w-12">
                                                 <input type="checkbox" id="selectAll"
                                                     class="form-checkbox h-5 w-5 text-brand-600 rounded focus:ring-brand-500 border-gray-300 cursor-pointer"
-                                                    title="Selecionar todos os clientes visíveis">
+                                                    title="Selecionar todos os clientes visíveis com coordenadas">
                                             </th>
-                                            <th
-                                                class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Nome</th>
-                                            <th
-                                                class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Cidade / UF</th>
-                                            <th
-                                                class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Status</th>
-                                            <th
-                                                class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Contato</th>
-                                            <th
-                                                class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Mapa</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Cliente</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Cidade / UF</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Status</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Perfil & Raças</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Categorias & Produção</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Mapa</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody class="divide-y divide-gray-100">
                                     <?php if (count($clients) > 0): ?>
                                         <?php foreach ($clients as $client): ?>
                                             <?php
                                             $hasCoords = !empty($client['latitude']) && !empty($client['longitude']);
                                             $isPotential = !empty($client['is_potential']) && $client['is_potential'] == 1;
                                             ?>
-                                            <tr
-                                                class="client-row hover:bg-gray-50 transition <?php echo !$hasCoords ? 'bg-gray-50/60 opacity-75' : ''; ?>">
+                                            <tr class="client-row hover:bg-brand-50/30 transition <?php echo !$hasCoords ? 'bg-gray-50/70 opacity-75' : ''; ?>">
                                                 <!-- Checkbox Column -->
-                                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm text-center">
+                                                <td class="px-5 py-4 text-center">
                                                     <input type="checkbox" name="client_ids[]"
                                                         value="<?php echo $client['id']; ?>"
                                                         class="client-checkbox form-checkbox h-5 w-5 text-brand-600 rounded focus:ring-brand-500 border-gray-300 cursor-pointer"
@@ -271,40 +544,42 @@ $statusFilterParam = $_GET['status'] ?? '';
                                                 </td>
 
                                                 <!-- Nome Column with Star and Farm -->
-                                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                                                    <div class="flex items-center">
+                                                <td class="px-5 py-4 text-sm">
+                                                    <div class="flex items-start">
                                                         <!-- Potential Star Toggle Button -->
                                                         <button type="submit" form="potentialForm_<?php echo $client['id']; ?>"
-                                                            class="mr-2 text-xl focus:outline-none transition transform hover:scale-125 cursor-pointer"
+                                                            class="mr-2 text-lg focus:outline-none transition transform hover:scale-125 cursor-pointer mt-0.5"
                                                             title="<?php echo $isPotential ? 'Remover dos clientes em potencial' : 'Marcar como cliente em potencial'; ?>">
                                                             <?php if ($isPotential): ?>
                                                                 <span class="text-amber-500">⭐</span>
                                                             <?php else: ?>
-                                                                <span
-                                                                    class="text-gray-300 hover:text-amber-400 grayscale opacity-40 hover:opacity-100">⭐</span>
+                                                                <span class="text-gray-300 hover:text-amber-400 grayscale opacity-40 hover:opacity-100">⭐</span>
                                                             <?php endif; ?>
                                                         </button>
 
                                                         <div>
-                                                            <p
-                                                                class="text-gray-900 font-bold whitespace-no-wrap client-name">
+                                                            <a href="client-details.php?id=<?php echo $client['id']; ?>" target="_blank"
+                                                               class="text-gray-900 font-bold hover:text-brand-600 hover:underline client-name">
                                                                 <?php echo htmlspecialchars($client['name']); ?>
-                                                            </p>
+                                                            </a>
                                                             <?php if (!empty($client['farm_name'])): ?>
-                                                                <p class="text-xs text-brand-800 font-medium client-farm">
+                                                                <p class="text-xs text-brand-900 font-medium client-farm mt-0.5">
                                                                     🏡 <?php echo htmlspecialchars($client['farm_name']); ?>
                                                                 </p>
                                                             <?php endif; ?>
                                                             <?php if (!$hasCoords): ?>
-                                                                <span class="text-[11px] text-amber-600 block mt-0.5">⚠️ Sem coordenadas para mapa</span>
+                                                                <span class="text-[11px] text-amber-600 block mt-0.5 font-medium">⚠️ Sem coordenadas no cadastro</span>
+                                                            <?php endif; ?>
+                                                            <?php if (!empty($client['phone'])): ?>
+                                                                <p class="text-xs text-gray-500 mt-1 client-phone">📞 <?php echo htmlspecialchars(formatPhone($client['phone'])); ?></p>
                                                             <?php endif; ?>
                                                         </div>
                                                     </div>
                                                 </td>
 
                                                 <!-- Cidade / UF Column -->
-                                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                                                    <span class="relative client-location text-gray-700">
+                                                <td class="px-5 py-4 text-sm whitespace-nowrap">
+                                                    <span class="client-location text-gray-700 font-medium">
                                                         <?php
                                                         $loc = array_filter([$client['city'] ?? '', $client['uf'] ?? '']);
                                                         echo htmlspecialchars(!empty($loc) ? implode(' / ', $loc) : 'N/A');
@@ -313,112 +588,104 @@ $statusFilterParam = $_GET['status'] ?? '';
                                                 </td>
 
                                                 <!-- Status Column -->
-                                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                                                <td class="px-5 py-4 text-sm whitespace-nowrap">
                                                     <span class="client-status">
                                                         <?php if (($client['status'] ?? '') === 'Embral'): ?>
-                                                            <span
-                                                                class="bg-blue-100 text-blue-800 text-xs px-3 py-1 rounded-full font-bold border border-blue-300 inline-block">
+                                                            <span class="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full font-bold border border-blue-300 inline-block">
                                                                 Embral
                                                             </span>
                                                         <?php elseif (($client['status'] ?? '') === 'Atendido'): ?>
-                                                            <span
-                                                                class="bg-purple-100 text-purple-800 text-xs px-3 py-1 rounded-full font-bold border border-purple-300 inline-block">
+                                                            <span class="bg-purple-100 text-purple-800 text-xs px-2.5 py-1 rounded-full font-bold border border-purple-300 inline-block">
                                                                 Atendido
                                                             </span>
                                                         <?php elseif (($client['status'] ?? '') === 'Inativo'): ?>
-                                                            <span
-                                                                class="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full font-bold border border-gray-300 inline-block">
+                                                            <span class="bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full font-bold border border-gray-300 inline-block">
                                                                 Inativo
                                                             </span>
                                                         <?php elseif (in_array($client['status'] ?? '', ['Novo', 'Pré-cadastro'])): ?>
-                                                            <span
-                                                                class="bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-bold border border-amber-300 inline-block">
+                                                            <span class="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-bold border border-amber-300 inline-block">
                                                                 Novo
                                                             </span>
                                                         <?php else: ?>
-                                                            <span
-                                                                class="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-bold border border-green-300 inline-block">
+                                                            <span class="bg-green-100 text-green-800 text-xs px-2.5 py-1 rounded-full font-bold border border-green-300 inline-block">
                                                                 Ativo
                                                             </span>
                                                         <?php endif; ?>
                                                     </span>
                                                 </td>
 
-                                                <!-- Contato Column (Phone with WhatsApp + Email) -->
-                                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                                                    <?php if (!empty($client['phone'])): ?>
-                                                        <a href="https://wa.me/+55<?php echo preg_replace('/[^0-9]/', '', $client['phone']); ?>"
-                                                            target="_blank"
-                                                            class="text-green-600 hover:text-green-800 font-semibold hover:underline flex items-center client-phone mb-1"
-                                                            title="Abrir conversa no WhatsApp">
-                                                            <svg class="w-4 h-4 mr-1.5 fill-current text-green-500 flex-shrink-0"
-                                                                viewBox="0 0 24 24">
-                                                                <path
-                                                                    d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
-                                                            </svg>
-                                                            <span><?php echo htmlspecialchars(formatPhone($client['phone'])); ?></span>
-                                                        </a>
+                                                <!-- Perfil & Raças -->
+                                                <td class="px-5 py-4 text-sm">
+                                                    <div class="font-semibold text-gray-800 text-xs">
+                                                        🐄 <?php echo htmlspecialchars($client['breed_interests'] ?: 'Sem raças'); ?>
+                                                    </div>
+                                                    <div class="text-gray-500 text-xs mt-1">
+                                                        💳 <?php echo htmlspecialchars($client['payment_condition'] ?: '-'); ?>
+                                                    </div>
+                                                </td>
+
+                                                <!-- Categorias & Sistema de Produção -->
+                                                <td class="px-5 py-4 text-sm max-w-xs">
+                                                    <?php if (!empty($client['animal_categories'])): ?>
+                                                        <div class="text-xs text-gray-800">
+                                                            <span class="font-bold text-brand-800 text-[11px] block">Categorias:</span>
+                                                            <?php echo htmlspecialchars($client['animal_categories']); ?>
+                                                        </div>
+                                                    <?php else: ?>
+                                                        <span class="text-gray-400 text-xs block">Sem categorias</span>
                                                     <?php endif; ?>
-                                                    <?php if (!empty($client['email'])): ?>
-                                                        <a href="mailto:<?php echo htmlspecialchars($client['email']); ?>"
-                                                            class="text-blue-600 hover:text-blue-800 text-xs flex items-center client-email hover:underline truncate max-w-xs"
-                                                            title="Enviar e-mail para <?php echo htmlspecialchars($client['email']); ?>">
-                                                            <svg class="w-3.5 h-3.5 mr-1 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
-                                                                </path>
-                                                            </svg>
-                                                            <span><?php echo htmlspecialchars($client['email']); ?></span>
-                                                        </a>
-                                                    <?php endif; ?>
-                                                    <?php if (empty($client['phone']) && empty($client['email'])): ?>
-                                                        <span class="text-gray-400 client-phone">-</span>
+
+                                                    <?php if (!empty($client['production_system'])): ?>
+                                                        <div class="text-xs text-gray-600 mt-1">
+                                                            <span class="font-bold text-gray-700 text-[11px]">Sistema:</span>
+                                                            <?php echo htmlspecialchars($client['production_system']); ?>
+                                                        </div>
                                                     <?php endif; ?>
                                                 </td>
 
                                                 <!-- Mapa Column -->
-                                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                                                <td class="px-5 py-4 text-sm whitespace-nowrap">
                                                     <?php if ($hasCoords): ?>
                                                         <a href="https://www.google.com/maps/search/?api=1&query=<?php echo $client['latitude']; ?>,<?php echo $client['longitude']; ?>"
-                                                            target="_blank" class="text-blue-500 hover:text-blue-800"
+                                                            target="_blank" class="text-blue-500 hover:text-blue-800 inline-flex items-center gap-1 text-xs font-semibold"
                                                             title="Ver no Google Maps">
-                                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                                     d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z">
                                                                 </path>
                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                                     d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                                             </svg>
+                                                            <span>Ver</span>
                                                         </a>
                                                     <?php else: ?>
-                                                        <span class="text-gray-400">-</span>
+                                                        <span class="text-gray-400 text-xs">-</span>
                                                     <?php endif; ?>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
                                     <?php else: ?>
                                         <tr>
-                                            <td colspan="6"
-                                                class="px-5 py-5 border-b border-gray-200 bg-white text-sm text-center text-gray-500">
-                                                Nenhum cliente cadastrado.
+                                            <td colspan="7" class="px-5 py-10 text-sm text-center text-gray-500 bg-white">
+                                                Nenhum cliente encontrado para os filtros selecionados.
                                             </td>
                                         </tr>
                                     <?php endif; ?>
-                                </tbody>
-                            </table>
+                                    </tbody>
+                                </table>
+                            </div>
+
                             <div id="noResults" class="hidden px-5 py-8 bg-white text-sm text-center text-gray-500">
                                 <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
                                 </svg>
-                                <p class="font-medium text-gray-600">Nenhum cliente encontrado para os critérios de busca.</p>
-                                <p class="text-xs text-gray-400 mt-1">Tente ajustar o termo de pesquisa ou o filtro de status.</p>
+                                <p class="font-medium text-gray-600">Nenhum cliente visível com os termos digitados.</p>
                             </div>
                         </div>
                     </div>
 
                     <!-- Fixed Footer Action -->
-                    <div
-                        class="fixed bottom-0 right-0 left-0 md:left-64 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex justify-between items-center z-10">
+                    <div class="fixed bottom-0 right-0 left-0 md:left-64 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex justify-between items-center z-10">
                         <span class="text-gray-700 font-semibold text-sm" id="selectionCount">0 itens selecionados</span>
                         <button type="submit"
                             class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-md transition transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm flex items-center cursor-pointer"
@@ -454,17 +721,14 @@ $statusFilterParam = $_GET['status'] ?? '';
 
             if (content.classList.contains('hidden')) {
                 content.classList.remove('hidden');
-                if (chevron) {
-                    chevron.classList.remove('-rotate-90');
-                }
+                if (chevron) chevron.classList.remove('-rotate-90');
             } else {
                 content.classList.add('hidden');
-                if (chevron) {
-                    chevron.classList.add('-rotate-90');
-                }
+                if (chevron) chevron.classList.add('-rotate-90');
             }
         }
-                function normalizeText(str) {
+
+        function normalizeText(str) {
             if (!str) return '';
             return str.toString()
                 .toLowerCase()
@@ -473,105 +737,18 @@ $statusFilterParam = $_GET['status'] ?? '';
                 .trim();
         }
 
-        function matchPhone(rawDigits, formattedText, searchRaw) {
-            if (!rawDigits && !formattedText) return false;
-
-            const searchDigits = (searchRaw || '').replace(/\D/g, '');
-            if (searchDigits.length >= 3) {
-                let searchWithout55 = searchDigits;
-                if (searchDigits.startsWith('55') && searchDigits.length >= 10) {
-                    searchWithout55 = searchDigits.substring(2);
-                }
-
-                let rowDigits = (rawDigits || '').replace(/\D/g, '');
-                if (rowDigits.startsWith('55') && rowDigits.length >= 12) {
-                    rowDigits = rowDigits.substring(2);
-                }
-
-                if (rowDigits) {
-                    if (rowDigits.includes(searchDigits)) return true;
-                    if (rowDigits.includes(searchWithout55)) return true;
-                    if (searchDigits.includes(rowDigits)) return true;
-                    if (('55' + rowDigits).includes(searchDigits)) return true;
-
-                    if (rowDigits.length === 11 && searchWithout55.length === 10) {
-                        const ddd = rowDigits.substring(0, 2);
-                        const rest = rowDigits.substring(3);
-                        if ((ddd + rest).includes(searchWithout55)) return true;
-                    }
-                    if (rowDigits.length === 10 && searchWithout55.length === 11) {
-                        const ddd = searchWithout55.substring(0, 2);
-                        const rest = searchWithout55.substring(3);
-                        if (rowDigits.includes(ddd + rest)) return true;
-                    }
-                }
-            }
-
-            const normSearch = normalizeText(searchRaw);
-            const normFormatted = normalizeText(formattedText);
-            if (normFormatted && normFormatted.includes(normSearch)) {
-                return true;
-            }
-
-            return false;
-        }
-
         function filterRows() {
             const searchInput = document.getElementById('searchInput');
-            const statusFilter = document.getElementById('statusFilter');
-
             const searchRaw = searchInput ? searchInput.value.trim() : '';
             const searchNorm = normalizeText(searchRaw);
-            const selectedStatus = statusFilter ? statusFilter.value.toLowerCase().trim() : '';
             const rows = document.querySelectorAll('.client-row');
             let hasVisible = false;
 
             rows.forEach(row => {
-                const nameEl = row.querySelector('.client-name');
-                const farmEl = row.querySelector('.client-farm');
-                const phoneEl = row.querySelector('.client-phone');
-                const emailEl = row.querySelector('.client-email');
-                const locationEl = row.querySelector('.client-location');
-                const statusEl = row.querySelector('.client-status');
+                const text = normalizeText(row.textContent);
+                const matches = !searchNorm || text.includes(searchNorm);
 
-                const name = normalizeText(nameEl ? nameEl.textContent : '');
-                const farm = normalizeText(farmEl ? farmEl.textContent : '');
-                const phoneDigits = phoneEl ? phoneEl.textContent.replace(/\D/g, '') : '';
-                const phoneFormatted = phoneEl ? phoneEl.textContent : '';
-                const email = normalizeText(emailEl ? emailEl.textContent : '');
-                const location = normalizeText(locationEl ? locationEl.textContent : '');
-                const status = normalizeText(statusEl ? statusEl.textContent : '');
-
-                // Status match logic
-                let statusMatches = true;
-                if (selectedStatus !== '') {
-                    if (selectedStatus === 'novo') {
-                        statusMatches = status.includes('novo') || status.includes('pre-cadastro') || status.includes('precadastro');
-                    } else if (selectedStatus === 'atendido') {
-                        statusMatches = status.includes('atendido');
-                    } else if (selectedStatus === 'embral') {
-                        statusMatches = status.includes('embral');
-                    } else if (selectedStatus === 'ativo') {
-                        statusMatches = status.includes('ativo');
-                    } else if (selectedStatus === 'inativo') {
-                        statusMatches = status.includes('inativo');
-                    } else {
-                        statusMatches = status.includes(selectedStatus);
-                    }
-                }
-
-                // Text & Phone search match logic
-                let textMatches = true;
-                if (searchNorm !== '') {
-                    textMatches = name.includes(searchNorm) ||
-                        farm.includes(searchNorm) ||
-                        email.includes(searchNorm) ||
-                        location.includes(searchNorm) ||
-                        status.includes(searchNorm) ||
-                        matchPhone(phoneDigits, phoneFormatted, searchRaw);
-                }
-
-                if (statusMatches && textMatches) {
+                if (matches) {
                     row.style.display = '';
                     hasVisible = true;
                 } else {
@@ -591,8 +768,10 @@ $statusFilterParam = $_GET['status'] ?? '';
             updateSelection();
         }
 
-        document.getElementById('searchInput').addEventListener('input', filterRows);
-        document.getElementById('statusFilter').addEventListener('change', filterRows);
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', filterRows);
+        }
 
         // Selection Logic
         const selectAll = document.getElementById('selectAll');
@@ -688,8 +867,151 @@ $statusFilterParam = $_GET['status'] ?? '';
             cb.addEventListener('change', updateSelection);
         });
 
-        // Initialize filter and selection count
-        filterRows();
+        // Initialize multi-select dropdowns
+        function initCustomMultiselects() {
+            document.querySelectorAll('.custom-multiselect').forEach(wrapper => {
+                const toggleBtn = wrapper.querySelector('.multiselect-toggle');
+                const menu = wrapper.querySelector('.multiselect-menu');
+                const arrow = wrapper.querySelector('.multiselect-arrow');
+                const label = wrapper.querySelector('.multiselect-label');
+                const badge = wrapper.querySelector('.multiselect-badge');
+                const searchInput = wrapper.querySelector('.multiselect-search');
+                const selectAllBtn = wrapper.querySelector('.multiselect-select-all');
+                const clearBtn = wrapper.querySelector('.multiselect-clear');
+                const checkboxes = wrapper.querySelectorAll('.multiselect-checkbox');
+                const defaultPlaceholder = wrapper.dataset.placeholder || 'Todos';
+
+                function updateDisplay() {
+                    const checkedBoxes = Array.from(checkboxes).filter(cb => cb.checked);
+                    const count = checkedBoxes.length;
+
+                    if (count === 0) {
+                        label.textContent = defaultPlaceholder;
+                        label.classList.remove('text-brand-900', 'font-semibold');
+                        label.classList.add('text-gray-500', 'font-normal');
+                        if (badge) badge.classList.add('hidden');
+                    } else {
+                        const checkedLabels = checkedBoxes.map(cb => {
+                            const item = cb.closest('.multiselect-item');
+                            return item ? item.querySelector('.multiselect-text').textContent.trim() : cb.value;
+                        });
+
+                        if (count <= 2) {
+                            label.textContent = checkedLabels.join(', ');
+                        } else {
+                            label.textContent = count + ' selecionados';
+                        }
+
+                        label.classList.remove('text-gray-500', 'font-normal');
+                        label.classList.add('text-brand-900', 'font-semibold');
+
+                        if (badge) {
+                            badge.textContent = count;
+                            badge.classList.remove('hidden');
+                        }
+                    }
+                }
+
+                toggleBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isOpen = !menu.classList.contains('hidden');
+
+                    // Close all other multiselects and reset z-index
+                    document.querySelectorAll('.custom-multiselect').forEach(w => {
+                        const m = w.querySelector('.multiselect-menu');
+                        const arr = w.querySelector('.multiselect-arrow');
+                        if (m && m !== menu) {
+                            m.classList.add('hidden');
+                            if (arr) arr.classList.remove('rotate-180');
+                        }
+                        w.classList.remove('z-50');
+                    });
+
+                    if (isOpen) {
+                        menu.classList.add('hidden');
+                        wrapper.classList.remove('z-50');
+                        if (arrow) arrow.classList.remove('rotate-180');
+                    } else {
+                        menu.classList.remove('hidden');
+                        wrapper.classList.add('z-50');
+                        if (arrow) arrow.classList.add('rotate-180');
+                        if (searchInput) searchInput.focus();
+                    }
+                });
+
+                menu.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+
+                checkboxes.forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        updateDisplay();
+                    });
+                });
+
+                if (selectAllBtn) {
+                    selectAllBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        checkboxes.forEach(cb => {
+                            const item = cb.closest('.multiselect-item');
+                            if (!item || !item.classList.contains('hidden')) {
+                                cb.checked = true;
+                            }
+                        });
+                        updateDisplay();
+                    });
+                }
+
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        checkboxes.forEach(cb => cb.checked = false);
+                        updateDisplay();
+                    });
+                }
+
+                if (searchInput) {
+                    searchInput.addEventListener('input', (e) => {
+                        const term = e.target.value.toLowerCase().trim();
+                        wrapper.querySelectorAll('.multiselect-item').forEach(item => {
+                            const text = item.querySelector('.multiselect-text').textContent.toLowerCase();
+                            if (!term || text.includes(term)) {
+                                item.classList.remove('hidden');
+                            } else {
+                                item.classList.add('hidden');
+                            }
+                        });
+                    });
+                }
+            });
+
+            document.addEventListener('click', () => {
+                document.querySelectorAll('.custom-multiselect').forEach(w => {
+                    const m = w.querySelector('.multiselect-menu');
+                    const arr = w.querySelector('.multiselect-arrow');
+                    if (m) m.classList.add('hidden');
+                    if (arr) arr.classList.remove('rotate-180');
+                    w.classList.remove('z-50');
+                });
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    document.querySelectorAll('.custom-multiselect').forEach(w => {
+                        const m = w.querySelector('.multiselect-menu');
+                        const arr = w.querySelector('.multiselect-arrow');
+                        if (m) m.classList.add('hidden');
+                        if (arr) arr.classList.remove('rotate-180');
+                        w.classList.remove('z-50');
+                    });
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initCustomMultiselects();
+            updateSelection();
+        });
     </script>
 </body>
 

@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Fetch Clients for dropdown
-$stmt = $pdo->prepare("SELECT id, name, farm_name FROM " . TABLE_NAME . "clients WHERE user_id = ? ORDER BY name ASC");
+$stmt = $pdo->prepare("SELECT id, name, farm_name, city, uf, address, latitude, longitude FROM " . TABLE_NAME . "clients WHERE user_id = ? ORDER BY name ASC");
 $stmt->execute([$user_id]);
 $clients = $stmt->fetchAll();
 
@@ -76,6 +76,7 @@ $eventTime = $startDate->format('H:i');
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Editar Compromisso - CRM Vitor Müller</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script>
         tailwind.config = {
             theme: {
@@ -98,6 +99,96 @@ $eventTime = $startDate->format('H:i');
             }
         }
     </script>
+    <style>
+        /* Select2 Custom Theme matching CRM Brand */
+        .select2-container {
+            width: 100% !important;
+        }
+        .select2-container--default .select2-selection--single {
+            height: 48px;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            padding: 0.625rem 0.875rem;
+            display: flex;
+            align-items: center;
+            background-color: #ffffff;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+        .select2-container--default .select2-selection--single:focus,
+        .select2-container--default.select2-container--open .select2-selection--single,
+        .select2-container--default.select2-container--focus .select2-selection--single {
+            border-color: #B8860B;
+            box-shadow: 0 0 0 2px rgba(184, 134, 11, 0.25);
+            outline: none;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #374151;
+            line-height: normal;
+            padding-left: 0;
+            padding-right: 28px;
+            font-size: 0.875rem;
+            width: 100%;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__placeholder {
+            color: #9ca3af;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 46px;
+            right: 12px;
+            display: flex;
+            align-items: center;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__clear {
+            position: absolute;
+            right: 32px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.25rem;
+            color: #9ca3af;
+            line-height: 1;
+            margin: 0;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__clear:hover {
+            color: #ef4444;
+        }
+        .select2-dropdown {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            z-index: 9999;
+        }
+        .select2-container--default .select2-search--dropdown {
+            padding: 8px;
+            background-color: #f9fafb;
+        }
+        .select2-container--default .select2-search--dropdown .select2-search__field {
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            padding: 6px 10px;
+            font-size: 0.875rem;
+            outline: none;
+        }
+        .select2-container--default .select2-search--dropdown .select2-search__field:focus {
+            border-color: #B8860B;
+            box-shadow: 0 0 0 2px rgba(184, 134, 11, 0.2);
+        }
+        .select2-results__option {
+            padding: 8px 12px;
+            font-size: 0.875rem;
+        }
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #FAF7F2;
+            color: #9E7005;
+            font-weight: 500;
+        }
+        .select2-container--default .select2-results__option[aria-selected=true] {
+            background-color: #F3E9D7;
+            color: #7A5400;
+            font-weight: 600;
+        }
+    </style>
 </head>
 
 <body class="bg-brand-50 font-sans leading-normal tracking-normal">
@@ -169,11 +260,17 @@ $eventTime = $startDate->format('H:i');
 
                                 <div>
                                     <label class="block text-gray-700 text-sm font-bold mb-2">Cliente Vinculado (Opcional)</label>
-                                    <select name="client_id"
-                                        class="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white">
-                                        <option value="">Nenhum cliente vinculado</option>
+                                    <select name="client_id" id="client_id" class="w-full">
+                                        <option value=""></option>
                                         <?php foreach ($clients as $client): ?>
-                                            <option value="<?php echo $client['id']; ?>" <?php echo $event['client_id'] == $client['id'] ? 'selected' : ''; ?>>
+                                            <option value="<?php echo $client['id']; ?>"
+                                                data-farm="<?php echo htmlspecialchars($client['farm_name'] ?? ''); ?>"
+                                                data-city="<?php echo htmlspecialchars($client['city'] ?? ''); ?>"
+                                                data-uf="<?php echo htmlspecialchars($client['uf'] ?? ''); ?>"
+                                                data-address="<?php echo htmlspecialchars($client['address'] ?? ''); ?>"
+                                                data-lat="<?php echo htmlspecialchars($client['latitude'] ?? ''); ?>"
+                                                data-lng="<?php echo htmlspecialchars($client['longitude'] ?? ''); ?>"
+                                                <?php echo $event['client_id'] == $client['id'] ? 'selected' : ''; ?>>
                                                 <?php echo htmlspecialchars($client['name']); ?>
                                                 <?php echo !empty($client['farm_name']) ? ' (' . htmlspecialchars($client['farm_name']) . ')' : ''; ?>
                                             </option>
@@ -260,12 +357,58 @@ $eventTime = $startDate->format('H:i');
         </div>
     </div>
 
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
     <!-- Google Maps script -->
     <script>
         let map;
         let marker;
         const initialLat = <?php echo !empty($event['latitude']) ? $event['latitude'] : 'null'; ?>;
         const initialLng = <?php echo !empty($event['longitude']) ? $event['longitude'] : 'null'; ?>;
+
+        $(document).ready(function() {
+            $('#client_id').select2({
+                placeholder: 'Selecione ou busque um cliente...',
+                allowClear: true,
+                width: '100%',
+                language: {
+                    noResults: function() {
+                        return "Nenhum cliente encontrado";
+                    },
+                    searching: function() {
+                        return "Buscando...";
+                    }
+                }
+            });
+
+            $('#client_id').on('select2:select', function(e) {
+                const selectedOpt = $(this).find(':selected');
+                if (!selectedOpt.val()) return;
+
+                const city = selectedOpt.data('city') || '';
+                const uf = selectedOpt.data('uf') || '';
+                const address = selectedOpt.data('address') || '';
+                const lat = selectedOpt.data('lat');
+                const lng = selectedOpt.data('lng');
+
+                const cityInput = document.getElementById('cityInput');
+                const ufInput = document.getElementById('ufInput');
+                const addressInput = document.getElementById('addressInput');
+
+                if (city && !cityInput.value) cityInput.value = city;
+                if (uf && !ufInput.value) ufInput.value = uf;
+                if (address && !addressInput.value) addressInput.value = address;
+
+                if (lat && lng && map && marker) {
+                    const pos = { lat: parseFloat(lat), lng: parseFloat(lng) };
+                    map.setCenter(pos);
+                    map.setZoom(16);
+                    setMarkerPosition(pos);
+                }
+            });
+        });
 
         function initMap() {
             const defaultPos = (initialLat && initialLng) 

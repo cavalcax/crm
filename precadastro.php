@@ -296,9 +296,9 @@ $states = getBrazilianStates();
                                     'Bezerras acima de 12 meses inseminadas',
                                     'Novilhas prenhas, com gestação de 2 a 5 meses',
                                     'Novilhas prenhas, com gestação superior a 5 meses',
-                                    'Vacas primeira cria (primeira numeral)',
-                                    'Vacas segunda cria (segunda numeral)',
-                                    'Vacas terceira cria (terceira numeral)'
+                                    'Vacas 1ª cria',
+                                    'Vacas 2ª cria',
+                                    'Vacas 3ª cria'
                                 ];
                                 foreach ($categories_list as $cat): ?>
                                     <label
@@ -427,7 +427,8 @@ $states = getBrazilianStates();
                         <div>
                             <label class="block text-sm font-bold text-gray-700 mb-1">Qual é a sua cidade e onde você
                                 mora?</label>
-                            <input type="text" name="city" id="cityInput" required placeholder="Ex: Castro / Fazenda Bela Vista"
+                            <input type="text" name="city" id="cityInput" required
+                                placeholder="Ex: Castro / Fazenda Bela Vista"
                                 class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
                         </div>
 
@@ -684,7 +685,7 @@ $states = getBrazilianStates();
         }
     </script>
 
-        <!-- Google Maps Script -->
+    <!-- Google Maps Script -->
     <script>
         function initMap() {
             const defaultPos = { lat: -25.4284, lng: -49.2733 }; // Default position

@@ -353,7 +353,8 @@ $current_categories = !empty($client['animal_categories']) ? array_map('trim', e
                             </div>
 
                             <div>
-                                <label class="block text-gray-700 text-sm font-bold mb-2">Qtd. de Animais que Necessita Adquirir</label>
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Qtd. de Animais que Necessita
+                                    Adquirir</label>
                                 <input type="text" name="purchase_animal_count"
                                     value="<?php echo htmlspecialchars($client['purchase_animal_count'] ?? ''); ?>"
                                     placeholder="Ex: 10 animais ou 15 a 20 cabeças"
@@ -369,8 +370,10 @@ $current_categories = !empty($client['animal_categories']) ? array_map('trim', e
                             </div>
 
                             <div class="md:col-span-2">
-                                <label class="block text-gray-700 text-sm font-bold mb-2">Categorias de Animais Desejadas (Múltipla Seleção)</label>
-                                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-brand-50 p-4 rounded-lg border border-brand-100">
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Categorias de Animais
+                                    Desejadas (Múltipla Seleção)</label>
+                                <div
+                                    class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-brand-50 p-4 rounded-lg border border-brand-100">
                                     <?php
                                     $categories_list = [
                                         'Bezerras de 0 a 3 meses',
@@ -379,9 +382,9 @@ $current_categories = !empty($client['animal_categories']) ? array_map('trim', e
                                         'Bezerras acima de 12 meses inseminadas',
                                         'Novilhas prenhas, com gestação de 2 a 5 meses',
                                         'Novilhas prenhas, com gestação superior a 5 meses',
-                                        'Vacas primeira cria (primeira numeral)',
-                                        'Vacas segunda cria (segunda numeral)',
-                                        'Vacas terceira cria (terceira numeral)'
+                                        'Vacas 1ª cria',
+                                        'Vacas 2ª cria',
+                                        'Vacas 3ª cria'
                                     ];
                                     foreach ($categories_list as $cat): ?>
                                         <label class="flex items-center cursor-pointer">
@@ -395,7 +398,8 @@ $current_categories = !empty($client['animal_categories']) ? array_map('trim', e
                             </div>
 
                             <div class="md:col-span-2">
-                                <label class="block text-gray-700 text-sm font-bold mb-2">Raças de Interesse / Máquinas (Múltipla
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Raças de Interesse / Máquinas
+                                    (Múltipla
                                     Seleção)</label>
                                 <div
                                     class="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-brand-50 p-4 rounded-lg border border-brand-100">

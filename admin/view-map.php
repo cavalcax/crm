@@ -1053,23 +1053,35 @@ $auctionsJson = json_encode($validAuctions);
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.payment_condition || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">2. Raças</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">2. Raças / Máquinas</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.breed_interests || '-'}</p>
                             </div>
+                            <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80 col-span-2">
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">3. Categorias de Animais</p>
+                                <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.animal_categories || '-'}</p>
+                            </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">3. Produtor Leite</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">4. Sistema de Produção</p>
+                                <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.production_system || '-'}</p>
+                            </div>
+                            <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">5. Produtor Leite</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.is_milk_producer || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">4. Motivo</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">6. Motivo Aquisição</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.acquisition_reason || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">5. Qtd. Animais</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">7. Qtd. a Adquirir</p>
+                                <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.purchase_animal_count || '-'}</p>
+                            </div>
+                            <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">8. Qtd. Animais Possuídos</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.animal_count_range || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">6. Produção Diária</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">9. Produção Diária</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.milk_production_range || '-'}</p>
                             </div>
                         </div>
