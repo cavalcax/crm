@@ -331,14 +331,18 @@ $breedsList = parseBreedsList($client['breed_interests'] ?? '');
         </div>
 
         <!-- Section 3: Intentions (if any) -->
+        <?php 
+        $activePdfInts = array_filter($intentions, fn($i) => empty($i['status']) || $i['status'] === 'active');
+        $inactivePdfInts = array_filter($intentions, fn($i) => ($i['status'] ?? '') === 'inactive');
+        ?>
         <?php if (!empty($intentions)): ?>
             <div class="pdf-section">
                 <h2 class="text-xs font-bold text-amber-900 uppercase tracking-wider bg-amber-50 py-1.5 px-3 rounded border-l-4 border-amber-600 mb-3">
-                    3. Intenções Comerciais (<?php echo count($intentions); ?>)
+                    3. Intenções Comerciais (<?php echo count($activePdfInts); ?> ativas<?php echo !empty($inactivePdfInts) ? ', ' . count($inactivePdfInts) . ' inativas' : ''; ?>)
                 </h2>
 
                 <div class="space-y-2.5">
-                    <?php foreach ($intentions as $intention): ?>
+                    <?php foreach ($activePdfInts as $intention): ?>
                         <div class="intention-item border p-3 rounded-lg text-xs <?php echo $intention['type'] === 'buy' ? 'bg-blue-50/70 border-blue-200' : 'bg-red-50/70 border-red-200'; ?>">
                             <div class="flex justify-between items-center">
                                 <span class="font-bold uppercase text-xs <?php echo $intention['type'] === 'buy' ? 'text-blue-800' : 'text-red-800'; ?>">
@@ -351,6 +355,33 @@ $breedsList = parseBreedsList($client['breed_interests'] ?? '');
                             <p class="text-gray-800 mt-1 leading-relaxed"><?php echo htmlspecialchars($intention['description']); ?></p>
                         </div>
                     <?php endforeach; ?>
+
+                    <?php if (!empty($inactivePdfInts)): ?>
+                        <div class="mt-2 pt-2">
+                            <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Intenções Finalizadas / Histórico:</p>
+                            <div class="space-y-2">
+                                <?php foreach ($inactivePdfInts as $intention): ?>
+                                    <div class="intention-item border border-gray-200 p-2.5 rounded-lg bg-gray-50 text-xs opacity-80">
+                                        <div class="flex justify-between items-center">
+                                            <span class="font-bold text-gray-700 text-xs">
+                                                <?php echo $intention['type'] === 'buy' ? '🛒 Compra' : '💰 Venda'; ?> - <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
+                                                <span class="ml-1 text-[10px] bg-gray-200 text-gray-700 font-bold px-1.5 py-0.2 rounded">Inativo</span>
+                                            </span>
+                                            <?php if (!empty($intention['inactivated_at'])): ?>
+                                                <span class="text-[10px] text-gray-400">Encerrado em <?php echo date('d/m/Y', strtotime($intention['inactivated_at'])); ?></span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <p class="text-gray-600 mt-0.5"><?php echo htmlspecialchars($intention['description']); ?></p>
+                                        <?php if (!empty($intention['inactivation_reason'])): ?>
+                                            <p class="text-[11px] text-amber-800 font-medium mt-1 bg-amber-50/80 p-1.5 rounded border border-amber-200/60">
+                                                <strong>Motivo:</strong> <?php echo htmlspecialchars($intention['inactivation_reason']); ?>
+                                            </p>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         <?php endif; ?>

@@ -34,7 +34,7 @@ $search_filter = isset($_GET['q']) ? sanitize($_GET['q']) : '';
 $query = "
     SELECT DISTINCT c.* 
     FROM " . TABLE_NAME . "clients c 
-    LEFT JOIN " . TABLE_NAME . "intentions i ON i.client_id = c.id
+    LEFT JOIN " . TABLE_NAME . "intentions i ON i.client_id = c.id AND (i.status = 'active' OR i.status IS NULL)
     WHERE c.user_id = :user_id
 ";
 
@@ -149,12 +149,12 @@ if (!empty($category_id_filters)) {
         $catIdPlaceholders[] = $pKey;
         $params[$pKey] = intval($cid);
     }
-    $query .= " AND i.category_id IN (" . implode(", ", $catIdPlaceholders) . ")";
+    $query .= " AND i.category_id IN (" . implode(", ", $catIdPlaceholders) . ") AND (i.status = 'active' OR i.status IS NULL)";
 }
 
 // Intention Type filter (buy/sell)
 if ($type_filter !== 'all' && !empty($type_filter)) {
-    $query .= " AND i.type = :type";
+    $query .= " AND i.type = :type AND (i.status = 'active' OR i.status IS NULL)";
     $params[':type'] = $type_filter;
 }
 
@@ -1011,6 +1011,15 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
         document.addEventListener('DOMContentLoaded', () => {
             initCustomMultiselects();
             updateSelection();
+
+            const mapFilterForm = document.getElementById('mapFilterForm');
+            if (mapFilterForm) {
+                mapFilterForm.addEventListener('submit', () => {
+                    if (typeof window.showLoading === 'function') {
+                        window.showLoading('Carregando mapa...', 'Filtrando clientes e pins geográficos');
+                    }
+                });
+            }
         });
     </script>
 </body>

@@ -43,6 +43,11 @@ function requireLogin()
         header("Location: ../login.php");
         exit;
     }
+    if (!headers_sent()) {
+        header("Cache-Control: no-cache, no-store, must-revalidate");
+        header("Pragma: no-cache");
+        header("Expires: 0");
+    }
 }
 
 function sanitize($data)
@@ -232,9 +237,13 @@ function buildClientEmbralWhatsAppMessage($client, $intentions = [])
     $msg .= "*Quantidade de Animais:* {$animalCount}\n";
     $msg .= "*Produção Diária de Leite:* {$milkProd}\n";
 
-    if (!empty($intentions)) {
+    $activeIntentions = array_filter($intentions, function($i) {
+        return empty($i['status']) || $i['status'] === 'active';
+    });
+
+    if (!empty($activeIntentions)) {
         $msg .= "\n*Intenções Registradas:*\n";
-        foreach ($intentions as $i) {
+        foreach ($activeIntentions as $i) {
             $type = ($i['type'] === 'buy') ? '🛒 Compra' : '💰 Venda';
             $cat = !empty($i['category_name']) ? " ({$i['category_name']})" : "";
             $val = !empty($i['value']) ? " - R$ " . number_format($i['value'], 2, ',', '.') : "";

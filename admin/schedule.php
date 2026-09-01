@@ -71,6 +71,14 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
             }
         }
     </script>
+    <style>
+        #eventsContainer {
+            visibility: hidden;
+        }
+        #eventsContainer.ready {
+            visibility: visible;
+        }
+    </style>
 </head>
 
 <body class="bg-brand-50 font-sans leading-normal tracking-normal">
@@ -130,7 +138,7 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
                 </div>
 
                 <!-- Event List (Simple Timeline) -->
-                <div class="space-y-4">
+                <div class="space-y-4" id="eventsContainer">
                     <?php if (count($events) > 0): ?>
                     <?php foreach ($events as $event):
         $date = new DateTime($event['start_time']);
@@ -342,6 +350,10 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
 
         // Run initial filter on page load
         filterEvents();
+
+        // Reveal fully-filtered events list smoothly
+        const eventsEl = document.getElementById('eventsContainer');
+        if (eventsEl) eventsEl.classList.add('ready');
 
         // Highlight event if passed in URL
         const urlParams = new URLSearchParams(window.location.search);

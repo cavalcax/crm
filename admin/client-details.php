@@ -84,9 +84,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_intention'])) {
     $description = sanitize($_POST['description']);
     $value = !empty($_POST['value']) ? floatval($_POST['value']) : null;
 
-    $stmt = $pdo->prepare("INSERT INTO " . TABLE_NAME . "intentions (client_id, category_id, type, description, value) VALUES (?, ?, ?, ?, ?)");
+    $stmt = $pdo->prepare("INSERT INTO " . TABLE_NAME . "intentions (client_id, category_id, type, description, value, status) VALUES (?, ?, ?, ?, ?, 'active')");
     $stmt->execute([$client_id, $category_id, $type, $description, $value]);
-    header("Location: client-details.php?id=" . $client_id);
+    header("Location: client-details.php?id=" . $client_id . "#intentionsContainer");
+    exit;
+}
+
+// Handle Inactivate Intention (with justification)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['inactivate_intention'])) {
+    $intention_id = intval($_POST['intention_id']);
+    $inactivation_reason = sanitize($_POST['inactivation_reason'] ?? '');
+    $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "intentions SET status = 'inactive', inactivation_reason = ?, inactivated_at = NOW() WHERE id = ? AND client_id = ?");
+    $stmt->execute([$inactivation_reason, $intention_id, $client_id]);
+    header("Location: client-details.php?id=" . $client_id . "#intentionsContainer");
+    exit;
+}
+
+// Handle Reactivate Intention
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reactivate_intention'])) {
+    $intention_id = intval($_POST['intention_id']);
+    $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "intentions SET status = 'active', inactivation_reason = NULL, inactivated_at = NULL WHERE id = ? AND client_id = ?");
+    $stmt->execute([$intention_id, $client_id]);
+    header("Location: client-details.php?id=" . $client_id . "#intentionsContainer");
     exit;
 }
 
@@ -95,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_intention'])) 
     $intention_id = $_POST['intention_id'];
     $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "intentions WHERE id = ? AND client_id = ?");
     $stmt->execute([$intention_id, $client_id]);
-    header("Location: client-details.php?id=" . $client_id);
+    header("Location: client-details.php?id=" . $client_id . "#intentionsContainer");
     exit;
 }
 
@@ -129,6 +148,7 @@ $clientSchedules = $stmt->fetchAll();
         <?php echo htmlspecialchars($client['name']); ?>
     </title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -679,15 +699,26 @@ $clientSchedules = $stmt->fetchAll();
 
                     <!-- Buy Intentions -->
                     <div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-blue-500 flex flex-col">
-                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                            <span class="p-2 bg-blue-100 rounded-full mr-2"><svg class="w-5 h-5 text-blue-600"
-                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg></span>
-                            Intenção de COMPRA
+                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center justify-between">
+                            <span class="flex items-center">
+                                <span class="p-2 bg-blue-100 rounded-full mr-2">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                </span>
+                                Intenção de COMPRA
+                            </span>
+                            <?php
+                            $activeBuys = array_filter($intentions, fn($i) => $i['type'] === 'buy' && (empty($i['status']) || $i['status'] === 'active'));
+                            $inactiveBuys = array_filter($intentions, fn($i) => $i['type'] === 'buy' && $i['status'] === 'inactive');
+                            ?>
+                            <span class="text-xs bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">
+                                <?php echo count($activeBuys); ?> ativa(s)
+                            </span>
                         </h3>
 
                         <!-- Add Form (Top) -->
@@ -701,7 +732,7 @@ $clientSchedules = $stmt->fetchAll();
                                     </option>
                                 <?php endforeach; ?>
                             </select>
-                            <textarea name="description" placeholder="Descrição (ex: procura animais...)"
+                            <textarea name="description" placeholder="Descrição (ex: procura 10 vacas holandesas...)"
                                 class="w-full mb-2 p-2 border rounded text-xs" rows="2" required></textarea>
                             <input type="number" name="value" placeholder="Valor Estimado (opcional)"
                                 class="w-full mb-2 p-2 border rounded text-xs" step="0.01">
@@ -713,47 +744,136 @@ $clientSchedules = $stmt->fetchAll();
 
                         <!-- List (Bottom) -->
                         <div class="flex-1">
-                            <h4 class="text-xs font-bold uppercase text-gray-400 tracking-wider mb-3">Compras
-                                Cadastradas</h4>
+                            <h4 class="text-xs font-bold uppercase text-gray-400 tracking-wider mb-3">
+                                Compras Cadastradas (<?php echo count($activeBuys); ?>
+                                ativas<?php echo !empty($inactiveBuys) ? ', ' . count($inactiveBuys) . ' inativas' : ''; ?>)
+                            </h4>
                             <ul class="space-y-3 max-h-80 overflow-y-auto pr-1">
-                                <?php $hasBuy = false; ?>
-                                <?php foreach ($intentions as $intention): ?>
-                                    <?php if ($intention['type'] === 'buy'):
-                                        $hasBuy = true; ?>
-                                        <li class="bg-blue-50 rounded-lg p-3 relative group border border-blue-100">
-                                            <p class="font-bold text-blue-900 text-sm">
-                                                <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
-                                            </p>
-                                            <p class="text-xs text-gray-700 mt-0.5">
-                                                <?php echo htmlspecialchars($intention['description']); ?>
-                                            </p>
-                                            <?php if ($intention['value'] > 0): ?>
-                                                <p class="text-xs font-semibold text-green-600 mt-1">R$
-                                                    <?php echo number_format($intention['value'], 2, ',', '.'); ?>
+                                <?php
+                                $allBuys = array_merge($activeBuys, $inactiveBuys);
+                                ?>
+                                <?php if (!empty($allBuys)): ?>
+                                    <?php foreach ($allBuys as $intention):
+                                        $isActive = empty($intention['status']) || $intention['status'] === 'active';
+                                        ?>
+                                        <?php if ($isActive): ?>
+                                            <!-- Compra Ativa -->
+                                            <li class="bg-blue-50/70 rounded-lg p-3 relative border border-blue-200">
+                                                <div class="flex items-center justify-between pr-14">
+                                                    <span class="font-bold text-blue-900 text-xs truncate">
+                                                        <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
+                                                    </span>
+                                                    <span
+                                                        class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded">Ativa</span>
+                                                </div>
+                                                <p class="text-xs text-gray-700 mt-1 leading-snug">
+                                                    <?php echo htmlspecialchars($intention['description']); ?>
                                                 </p>
-                                            <?php endif; ?>
+                                                <?php if ($intention['value'] > 0): ?>
+                                                    <p class="text-xs font-semibold text-green-700 mt-1">
+                                                        R$ <?php echo number_format($intention['value'], 2, ',', '.'); ?>
+                                                    </p>
+                                                <?php endif; ?>
 
-                                            <form method="POST" class="absolute top-2 right-2 transition"
-                                                onsubmit="confirmDelete(event)">
-                                                <input type="hidden" name="intention_id"
-                                                    value="<?php echo $intention['id']; ?>">
-                                                <input type="hidden" name="delete_intention" value="1">
-                                                <button type="submit"
-                                                    class="text-red-400 hover:text-red-700 p-0.5 cursor-pointer"
-                                                    title="Excluir intenção">
-                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
-                                                        </path>
-                                                    </svg>
-                                                </button>
-                                            </form>
-                                        </li>
-                                    <?php endif; ?>
-                                <?php endforeach; ?>
-                                <?php if (!$hasBuy): ?>
-                                    <li class="text-xs text-gray-400 italic py-2 bg-gray-50 p-3 rounded">Nenhuma intenção de
-                                        compra registrada.</li>
+                                                <div class="absolute top-2.5 right-2.5 flex items-center space-x-1.5">
+                                                    <!-- Inactivate Button -->
+                                                    <button type="button"
+                                                        onclick="inactivateIntention(<?php echo $intention['id']; ?>, '<?php echo addslashes($intention['category_name'] ?? 'Compra'); ?>')"
+                                                        class="text-amber-600 hover:text-amber-800 p-1 hover:bg-amber-100 rounded transition cursor-pointer"
+                                                        title="Inativar interesse informando justificativa">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z">
+                                                            </path>
+                                                        </svg>
+                                                    </button>
+                                                    <!-- Delete Button -->
+                                                    <form method="POST" onsubmit="confirmDelete(event)">
+                                                        <input type="hidden" name="intention_id"
+                                                            value="<?php echo $intention['id']; ?>">
+                                                        <input type="hidden" name="delete_intention" value="1">
+                                                        <button type="submit"
+                                                            class="text-red-400 hover:text-red-700 p-1 hover:bg-red-50 rounded transition cursor-pointer"
+                                                            title="Excluir">
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                                viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                                    stroke-width="2"
+                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                                                </path>
+                                                            </svg>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </li>
+                                        <?php else: ?>
+                                            <!-- Compra Inativa (com justificativa) -->
+                                            <li class="bg-gray-100 rounded-lg p-3 relative border border-gray-300">
+                                                <div class="flex items-center justify-between pr-14">
+                                                    <span class="font-bold text-gray-700 text-xs truncate">
+                                                        <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
+                                                    </span>
+                                                    <span
+                                                        class="bg-gray-200 text-gray-700 text-[10px] font-bold px-1.5 py-0.5 rounded">Inativa</span>
+                                                </div>
+
+                                                <!-- Linha 1: Descrição da Intenção -->
+                                                <div class="text-xs text-gray-700 mt-1 leading-snug">
+                                                    <span class="font-bold text-gray-500 text-[11px]">Descrição:</span>
+                                                    <?php echo htmlspecialchars($intention['description']); ?>
+                                                    <?php if ($intention['value'] > 0): ?>
+                                                        <span class="text-green-700 font-semibold text-[11px] ml-1">(R$
+                                                            <?php echo number_format($intention['value'], 2, ',', '.'); ?>)</span>
+                                                    <?php endif; ?>
+                                                </div>
+
+                                                <!-- Linha 2: Justificativa -->
+                                                <div
+                                                    class="text-xs text-amber-950 bg-amber-50 border border-amber-200 rounded p-2 mt-2 leading-relaxed">
+                                                    <span class="font-bold text-amber-800">Justificativa:</span>
+                                                    <?php echo htmlspecialchars($intention['inactivation_reason'] ?: 'Não informada'); ?>
+                                                    <?php if (!empty($intention['inactivated_at'])): ?>
+                                                        <span class="block text-[10px] text-gray-500 mt-0.5">Inativado em:
+                                                            <?php echo date('d/m/Y H:i', strtotime($intention['inactivated_at'])); ?></span>
+                                                    <?php endif; ?>
+                                                </div>
+
+                                                <div class="absolute top-2.5 right-2.5 flex items-center space-x-1.5">
+                                                    <!-- Reactivate Button -->
+                                                    <button type="button"
+                                                        onclick="reactivateIntention(<?php echo $intention['id']; ?>)"
+                                                        class="text-emerald-600 hover:text-emerald-800 p-1 hover:bg-emerald-50 rounded transition cursor-pointer"
+                                                        title="Reativar interesse">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                                            </path>
+                                                        </svg>
+                                                    </button>
+                                                    <!-- Delete Button -->
+                                                    <form method="POST" onsubmit="confirmDelete(event)">
+                                                        <input type="hidden" name="intention_id"
+                                                            value="<?php echo $intention['id']; ?>">
+                                                        <input type="hidden" name="delete_intention" value="1">
+                                                        <button type="submit"
+                                                            class="text-red-400 hover:text-red-700 p-1 hover:bg-red-50 rounded transition cursor-pointer"
+                                                            title="Excluir">
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                                viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                                    stroke-width="2"
+                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                                                </path>
+                                                            </svg>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </li>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <li class="text-xs text-gray-400 italic py-2 bg-gray-50 p-3 rounded text-center">Nenhuma
+                                        intenção de compra registrada.</li>
                                 <?php endif; ?>
                             </ul>
                         </div>
@@ -761,13 +881,24 @@ $clientSchedules = $stmt->fetchAll();
 
                     <!-- Sell Intentions -->
                     <div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-red-500 flex flex-col">
-                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                            <span class="p-2 bg-red-100 rounded-full mr-2"><svg class="w-5 h-5 text-red-600" fill="none"
-                                    stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M7 11l5-5m0 0l5 5m-5-5v12" />
-                                </svg></span>
-                            Intenção de VENDA
+                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center justify-between">
+                            <span class="flex items-center">
+                                <span class="p-2 bg-red-100 rounded-full mr-2">
+                                    <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M7 11l5-5m0 0l5 5m-5-5v12" />
+                                    </svg>
+                                </span>
+                                Intenção de VENDA
+                            </span>
+                            <?php
+                            $activeSells = array_filter($intentions, fn($i) => $i['type'] === 'sell' && (empty($i['status']) || $i['status'] === 'active'));
+                            $inactiveSells = array_filter($intentions, fn($i) => $i['type'] === 'sell' && $i['status'] === 'inactive');
+                            ?>
+                            <span class="text-xs bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded-full">
+                                <?php echo count($activeSells); ?> ativa(s)
+                            </span>
                         </h3>
 
                         <!-- Add Form (Top) -->
@@ -781,7 +912,7 @@ $clientSchedules = $stmt->fetchAll();
                                     </option>
                                 <?php endforeach; ?>
                             </select>
-                            <textarea name="description" placeholder="Descrição (ex: vende bezerras...)"
+                            <textarea name="description" placeholder="Descrição (ex: vende 15 bezerras...)"
                                 class="w-full mb-2 p-2 border rounded text-xs" rows="2" required></textarea>
                             <input type="number" name="value" placeholder="Valor Estimado (opcional)"
                                 class="w-full mb-2 p-2 border rounded text-xs" step="0.01">
@@ -793,47 +924,136 @@ $clientSchedules = $stmt->fetchAll();
 
                         <!-- List (Bottom) -->
                         <div class="flex-1">
-                            <h4 class="text-xs font-bold uppercase text-gray-400 tracking-wider mb-3">Vendas Cadastradas
+                            <h4 class="text-xs font-bold uppercase text-gray-400 tracking-wider mb-3">
+                                Vendas Cadastradas (<?php echo count($activeSells); ?>
+                                ativas<?php echo !empty($inactiveSells) ? ', ' . count($inactiveSells) . ' inativas' : ''; ?>)
                             </h4>
                             <ul class="space-y-3 max-h-80 overflow-y-auto pr-1">
-                                <?php $hasSell = false; ?>
-                                <?php foreach ($intentions as $intention): ?>
-                                    <?php if ($intention['type'] === 'sell'):
-                                        $hasSell = true; ?>
-                                        <li class="bg-red-50 rounded-lg p-3 relative group border border-red-100">
-                                            <p class="font-bold text-red-900 text-sm">
-                                                <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
-                                            </p>
-                                            <p class="text-xs text-gray-700 mt-0.5">
-                                                <?php echo htmlspecialchars($intention['description']); ?>
-                                            </p>
-                                            <?php if ($intention['value'] > 0): ?>
-                                                <p class="text-xs font-semibold text-green-600 mt-1">R$
-                                                    <?php echo number_format($intention['value'], 2, ',', '.'); ?>
+                                <?php
+                                $allSells = array_merge($activeSells, $inactiveSells);
+                                ?>
+                                <?php if (!empty($allSells)): ?>
+                                    <?php foreach ($allSells as $intention):
+                                        $isActive = empty($intention['status']) || $intention['status'] === 'active';
+                                        ?>
+                                        <?php if ($isActive): ?>
+                                            <!-- Venda Ativa -->
+                                            <li class="bg-red-50/70 rounded-lg p-3 relative border border-red-200">
+                                                <div class="flex items-center justify-between pr-14">
+                                                    <span class="font-bold text-red-900 text-xs truncate">
+                                                        <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
+                                                    </span>
+                                                    <span
+                                                        class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded">Ativa</span>
+                                                </div>
+                                                <p class="text-xs text-gray-700 mt-1 leading-snug">
+                                                    <?php echo htmlspecialchars($intention['description']); ?>
                                                 </p>
-                                            <?php endif; ?>
+                                                <?php if ($intention['value'] > 0): ?>
+                                                    <p class="text-xs font-semibold text-green-700 mt-1">
+                                                        R$ <?php echo number_format($intention['value'], 2, ',', '.'); ?>
+                                                    </p>
+                                                <?php endif; ?>
 
-                                            <form method="POST" class="absolute top-2 right-2 transition"
-                                                onsubmit="confirmDelete(event)">
-                                                <input type="hidden" name="intention_id"
-                                                    value="<?php echo $intention['id']; ?>">
-                                                <input type="hidden" name="delete_intention" value="1">
-                                                <button type="submit"
-                                                    class="text-red-400 hover:text-red-700 p-0.5 cursor-pointer"
-                                                    title="Excluir intenção">
-                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
-                                                        </path>
-                                                    </svg>
-                                                </button>
-                                            </form>
-                                        </li>
-                                    <?php endif; ?>
-                                <?php endforeach; ?>
-                                <?php if (!$hasSell): ?>
-                                    <li class="text-xs text-gray-400 italic py-2 bg-gray-50 p-3 rounded">Nenhuma intenção de
-                                        venda registrada.</li>
+                                                <div class="absolute top-2.5 right-2.5 flex items-center space-x-1.5">
+                                                    <!-- Inactivate Button -->
+                                                    <button type="button"
+                                                        onclick="inactivateIntention(<?php echo $intention['id']; ?>, '<?php echo addslashes($intention['category_name'] ?? 'Venda'); ?>')"
+                                                        class="text-amber-600 hover:text-amber-800 p-1 hover:bg-amber-100 rounded transition cursor-pointer"
+                                                        title="Inativar interesse informando justificativa">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z">
+                                                            </path>
+                                                        </svg>
+                                                    </button>
+                                                    <!-- Delete Button -->
+                                                    <form method="POST" onsubmit="confirmDelete(event)">
+                                                        <input type="hidden" name="intention_id"
+                                                            value="<?php echo $intention['id']; ?>">
+                                                        <input type="hidden" name="delete_intention" value="1">
+                                                        <button type="submit"
+                                                            class="text-red-400 hover:text-red-700 p-1 hover:bg-red-50 rounded transition cursor-pointer"
+                                                            title="Excluir">
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                                viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                                    stroke-width="2"
+                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                                                </path>
+                                                            </svg>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </li>
+                                        <?php else: ?>
+                                            <!-- Venda Inativa (com justificativa) -->
+                                            <li class="bg-gray-100 rounded-lg p-3 relative border border-gray-300">
+                                                <div class="flex items-center justify-between pr-14">
+                                                    <span class="font-bold text-gray-700 text-xs truncate">
+                                                        <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
+                                                    </span>
+                                                    <span
+                                                        class="bg-gray-200 text-gray-700 text-[10px] font-bold px-1.5 py-0.5 rounded">Inativa</span>
+                                                </div>
+
+                                                <!-- Linha 1: Descrição da Intenção -->
+                                                <div class="text-xs text-gray-700 mt-1 leading-snug">
+                                                    <span class="font-bold text-gray-500 text-[11px]">Descrição:</span>
+                                                    <?php echo htmlspecialchars($intention['description']); ?>
+                                                    <?php if ($intention['value'] > 0): ?>
+                                                        <span class="text-green-700 font-semibold text-[11px] ml-1">(R$
+                                                            <?php echo number_format($intention['value'], 2, ',', '.'); ?>)</span>
+                                                    <?php endif; ?>
+                                                </div>
+
+                                                <!-- Linha 2: Justificativa -->
+                                                <div
+                                                    class="text-xs text-amber-950 bg-amber-50 border border-amber-200 rounded p-2 mt-2 leading-relaxed">
+                                                    <span class="font-bold text-amber-800">Justificativa:</span>
+                                                    <?php echo htmlspecialchars($intention['inactivation_reason'] ?: 'Não informada'); ?>
+                                                    <?php if (!empty($intention['inactivated_at'])): ?>
+                                                        <span class="block text-[10px] text-gray-500 mt-0.5">Inativado em:
+                                                            <?php echo date('d/m/Y H:i', strtotime($intention['inactivated_at'])); ?></span>
+                                                    <?php endif; ?>
+                                                </div>
+
+                                                <div class="absolute top-2.5 right-2.5 flex items-center space-x-1.5">
+                                                    <!-- Reactivate Button -->
+                                                    <button type="button"
+                                                        onclick="reactivateIntention(<?php echo $intention['id']; ?>)"
+                                                        class="text-emerald-600 hover:text-emerald-800 p-1 hover:bg-emerald-50 rounded transition cursor-pointer"
+                                                        title="Reativar interesse">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                                            </path>
+                                                        </svg>
+                                                    </button>
+                                                    <!-- Delete Button -->
+                                                    <form method="POST" onsubmit="confirmDelete(event)">
+                                                        <input type="hidden" name="intention_id"
+                                                            value="<?php echo $intention['id']; ?>">
+                                                        <input type="hidden" name="delete_intention" value="1">
+                                                        <button type="submit"
+                                                            class="text-red-400 hover:text-red-700 p-1 hover:bg-red-50 rounded transition cursor-pointer"
+                                                            title="Excluir">
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                                viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                                    stroke-width="2"
+                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                                                </path>
+                                                            </svg>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </li>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <li class="text-xs text-gray-400 italic py-2 bg-gray-50 p-3 rounded text-center">Nenhuma
+                                        intenção de venda registrada.</li>
                                 <?php endif; ?>
                             </ul>
                         </div>
@@ -842,6 +1062,78 @@ $clientSchedules = $stmt->fetchAll();
             </main>
         </div>
     </div>
+
+    <script>
+        function inactivateIntention(id, label) {
+            Swal.fire({
+                title: 'Inativar Interesse?',
+                html: `
+                    <div class="text-left space-y-2">
+                        <p class="text-xs text-gray-600">Informe a <strong>justificativa</strong> para registrar o motivo de não haver mais interesse no momento (ex: comprou de outro fornecedor, desistiu temporariamente, etc.):</p>
+                        <textarea id="swal-reason-input" class="w-full p-2.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none" rows="3" placeholder="Ex: O cliente comprou 10 vacas em outro leilão na semana passada..."></textarea>
+                    </div>
+                `,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d97706',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Confirmar Inativação',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const reason = document.getElementById('swal-reason-input').value.trim();
+                    if (!reason) {
+                        Swal.showValidationMessage('Por favor, informe a justificativa antes de confirmar.');
+                        return false;
+                    }
+                    return reason;
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.innerHTML = `
+                        <input type="hidden" name="intention_id" value="${id}">
+                        <input type="hidden" name="inactivation_reason" value="${escapeHtml(result.value)}">
+                        <input type="hidden" name="inactivate_intention" value="1">
+                    `;
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
+        }
+
+        function reactivateIntention(id) {
+            Swal.fire({
+                title: 'Reativar Intenção?',
+                text: 'Esta intenção voltará a constar como ativa nas buscas, relatórios e contagens.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#16a34a',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Sim, Reativar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.innerHTML = `
+                        <input type="hidden" name="intention_id" value="${id}">
+                        <input type="hidden" name="reactivate_intention" value="1">
+                    `;
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
 </body>
 
 </html>

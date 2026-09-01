@@ -114,14 +114,97 @@
     </div>
 </header>
 
+<!-- Universal Modal de Aguarde / Loading Overlay -->
+<div id="globalLoadingOverlay" class="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-50 flex items-center justify-center transition-opacity duration-200 opacity-0 pointer-events-none">
+    <div class="bg-white px-6 py-5 rounded-2xl shadow-2xl flex items-center space-x-4 border border-gray-100 max-w-xs sm:max-w-sm">
+        <div class="w-8 h-8 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin flex-shrink-0"></div>
+        <div>
+            <p class="font-bold text-gray-800 text-sm" id="globalLoadingTitle">Carregando dados...</p>
+            <p class="text-xs text-gray-500" id="globalLoadingSubtitle">Por favor, aguarde um instante</p>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+    // ==========================================
+    // GLOBAL LOADING OVERLAY CONTROLLER
+    // ==========================================
+    window.showLoading = function(title = "Carregando dados...", subtitle = "Por favor, aguarde um instante") {
+        const overlay = document.getElementById('globalLoadingOverlay');
+        if (!overlay) return;
+        const titleEl = document.getElementById('globalLoadingTitle');
+        const subEl = document.getElementById('globalLoadingSubtitle');
+        if (titleEl) titleEl.textContent = title;
+        if (subEl) subEl.textContent = subtitle;
+        overlay.classList.remove('opacity-0', 'pointer-events-none');
+    };
+
+    window.hideLoading = function() {
+        const overlay = document.getElementById('globalLoadingOverlay');
+        if (!overlay) return;
+        overlay.classList.add('opacity-0', 'pointer-events-none');
+    };
+
+    // Auto-attach loading indicator to filter/search forms
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('form[data-loading="true"], form.filter-form').forEach(form => {
+            form.addEventListener('submit', () => {
+                window.showLoading('Aplicando filtros...', 'Atualizando dados da lista');
+            });
+        });
+    });
+
+    // ==========================================
+    // SIDEBAR & BROWSER BACK BUTTON CONTROLLER
+    // ==========================================
     const sidebar = document.getElementById('sidebar');
     const sidebarBtn = document.getElementById('sidebarBtn');
 
     if (sidebarBtn) {
-        sidebarBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('-translate-x-full');
+        sidebarBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (sidebar) {
+                sidebar.classList.toggle('-translate-x-full');
+            }
+        });
+    }
+
+    // Close mobile sidebar when clicking outside on mobile
+    document.addEventListener('click', (e) => {
+        if (sidebar && !sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) {
+            if (!sidebar.contains(e.target) && sidebarBtn && !sidebarBtn.contains(e.target)) {
+                sidebar.classList.add('-translate-x-full');
+            }
+        }
+    });
+
+    // Intercept Browser / Smartphone Back Button
+    // 1. Closes open mobile menu instead of leaving the page
+    // 2. Closes open SweetAlert modals
+    // 3. Closes notification dropdown
+    // 4. Traps navigation to avoid POST resubmission error screens
+    if (window.history && window.history.pushState) {
+        window.history.pushState(null, "", window.location.href);
+
+        window.addEventListener('popstate', function(event) {
+            // Check 1: SweetAlert modal open
+            if (typeof Swal !== 'undefined' && Swal.isVisible()) {
+                Swal.close();
+            }
+
+            // Check 2: Mobile Sidebar open -> close it
+            if (sidebar && !sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) {
+                sidebar.classList.add('-translate-x-full');
+            }
+
+            // Check 3: Notification Dropdown open -> close it
+            if (typeof notifDropdown !== 'undefined' && notifDropdown && !notifDropdown.classList.contains('hidden')) {
+                notifDropdown.classList.add('hidden');
+            }
+
+            // Keep user on current page to avoid POST resubmission / error screens
+            window.history.pushState(null, "", window.location.href);
         });
     }
 

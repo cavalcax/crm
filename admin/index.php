@@ -42,13 +42,13 @@ $stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "schedule WHERE use
 $stmt->execute([$user_id]);
 $eventCount = $stmt->fetchColumn();
 
-// Intenções de Compra
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "intentions WHERE client_id IN (SELECT id FROM " . TABLE_NAME . "clients WHERE user_id = ?) AND type = 'buy'");
+// Intenções de Compra (Ativas)
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "intentions WHERE client_id IN (SELECT id FROM " . TABLE_NAME . "clients WHERE user_id = ?) AND type = 'buy' AND (status = 'active' OR status IS NULL)");
 $stmt->execute([$user_id]);
 $buyCount = $stmt->fetchColumn();
 
-// Intenções de Venda
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "intentions WHERE client_id IN (SELECT id FROM " . TABLE_NAME . "clients WHERE user_id = ?) AND type = 'sell'");
+// Intenções de Venda (Ativas)
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "intentions WHERE client_id IN (SELECT id FROM " . TABLE_NAME . "clients WHERE user_id = ?) AND type = 'sell' AND (status = 'active' OR status IS NULL)");
 $stmt->execute([$user_id]);
 $sellCount = $stmt->fetchColumn();
 

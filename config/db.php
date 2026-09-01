@@ -109,6 +109,21 @@ try {
             INDEX idx_user (user_id),
             INDEX idx_date (interaction_date)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Auto-migration: ensure intentions has status, inactivation_reason and inactivated_at columns
+        try {
+            $intColumns = $pdo->query("SHOW COLUMNS FROM " . TABLE_NAME . "intentions")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('status', $intColumns)) {
+                $pdo->exec("ALTER TABLE " . TABLE_NAME . "intentions ADD COLUMN status VARCHAR(20) DEFAULT 'active'");
+                $pdo->exec("UPDATE " . TABLE_NAME . "intentions SET status = 'active' WHERE status IS NULL");
+            }
+            if (!in_array('inactivation_reason', $intColumns)) {
+                $pdo->exec("ALTER TABLE " . TABLE_NAME . "intentions ADD COLUMN inactivation_reason TEXT NULL");
+            }
+            if (!in_array('inactivated_at', $intColumns)) {
+                $pdo->exec("ALTER TABLE " . TABLE_NAME . "intentions ADD COLUMN inactivated_at DATETIME NULL");
+            }
+        } catch (Exception $e) {}
     } catch (Exception $e) {
         // Table may not exist yet or connection error during setup
     }

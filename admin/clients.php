@@ -122,9 +122,28 @@ $statusFilterParam = $_GET['status'] ?? '';
             }
         }
     </script>
+    <style>
+        #clientsTable tbody {
+            visibility: hidden;
+        }
+        #clientsTable.ready tbody {
+            visibility: visible;
+        }
+    </style>
 </head>
 
 <body class="bg-brand-50 font-sans leading-normal tracking-normal">
+    <!-- Modal de Aguarde / Loading Overlay -->
+    <div id="clientsLoadingOverlay" class="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-50 flex items-center justify-center transition-opacity duration-200">
+        <div class="bg-white px-6 py-5 rounded-2xl shadow-2xl flex items-center space-x-4 border border-gray-100 max-w-xs sm:max-w-sm">
+            <div class="w-8 h-8 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin flex-shrink-0"></div>
+            <div>
+                <p class="font-bold text-gray-800 text-sm">Carregando dados...</p>
+                <p class="text-xs text-gray-500">Filtrando e organizando a lista</p>
+            </div>
+        </div>
+    </div>
+
     <div class="relative min-h-screen md:flex">
         <?php include '../components/sidebar.php'; ?>
         <div class="flex-1 flex flex-col min-h-screen overflow-hidden">
@@ -945,6 +964,15 @@ $statusFilterParam = $_GET['status'] ?? '';
         initFilters();
         updateSortIcons();
         renderPagination();
+
+        // Reveal fully-ready table and dismiss loading overlay
+        const tableEl = document.getElementById('clientsTable');
+        if (tableEl) tableEl.classList.add('ready');
+        const overlayEl = document.getElementById('clientsLoadingOverlay');
+        if (overlayEl) {
+            overlayEl.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => overlayEl.remove(), 250);
+        }
     </script>
 </body>
 

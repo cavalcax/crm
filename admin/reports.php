@@ -25,9 +25,9 @@ $query = "
     SELECT c.id as client_id, c.name as client_name, c.farm_name, c.phone, c.email, c.uf, c.city, c.status, c.is_potential,
            c.payment_condition, c.breed_interests, c.animal_categories, c.production_system, c.is_milk_producer, c.acquisition_reason,
            c.animal_count_range, c.milk_production_range, c.purchase_animal_count,
-           i.id as intention_id, i.type, i.description, i.value, cat.name as category_name 
+           i.id as intention_id, i.type, i.description, i.value, i.status as intention_status, cat.name as category_name 
     FROM " . TABLE_NAME . "clients c
-    LEFT JOIN " . TABLE_NAME . "intentions i ON i.client_id = c.id
+    LEFT JOIN " . TABLE_NAME . "intentions i ON i.client_id = c.id AND (i.status = 'active' OR i.status IS NULL)
     LEFT JOIN " . TABLE_NAME . "categories cat ON i.category_id = cat.id 
     WHERE c.user_id = :user_id
 ";
@@ -143,12 +143,12 @@ if (!empty($category_id_filters)) {
         $catIdPlaceholders[] = $pKey;
         $params[$pKey] = intval($cid);
     }
-    $query .= " AND i.category_id IN (" . implode(", ", $catIdPlaceholders) . ")";
+    $query .= " AND i.category_id IN (" . implode(", ", $catIdPlaceholders) . ") AND (i.status = 'active' OR i.status IS NULL)";
 }
 
 // Intention Type filter (buy/sell)
 if ($type_filter !== 'all' && !empty($type_filter)) {
-    $query .= " AND i.type = :type";
+    $query .= " AND i.type = :type AND (i.status = 'active' OR i.status IS NULL)";
     $params[':type'] = $type_filter;
 }
 
@@ -226,6 +226,17 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
 </head>
 
 <body class="bg-brand-50 font-sans leading-normal tracking-normal">
+    <!-- Modal de Aguarde / Loading Overlay -->
+    <div id="reportsLoadingOverlay" class="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-50 flex items-center justify-center transition-opacity duration-200 opacity-0 pointer-events-none">
+        <div class="bg-white px-6 py-5 rounded-2xl shadow-2xl flex items-center space-x-4 border border-gray-100 max-w-xs sm:max-w-sm">
+            <div class="w-8 h-8 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin flex-shrink-0"></div>
+            <div>
+                <p class="font-bold text-gray-800 text-sm">Carregando relatório...</p>
+                <p class="text-xs text-gray-500">Processando filtros e registros</p>
+            </div>
+        </div>
+    </div>
+
     <div class="relative min-h-screen md:flex">
         <?php include '../components/sidebar.php'; ?>
         <div class="flex-1 flex flex-col min-h-screen overflow-hidden">
@@ -666,6 +677,16 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                     });
                 }
             });
+            // Show loading modal on form submit
+            const filterForm = document.querySelector('form[method="GET"]');
+            if (filterForm) {
+                filterForm.addEventListener('submit', () => {
+                    const overlay = document.getElementById('reportsLoadingOverlay');
+                    if (overlay) {
+                        overlay.classList.remove('opacity-0', 'pointer-events-none');
+                    }
+                });
+            }
         }
 
         document.addEventListener('DOMContentLoaded', initCustomMultiselects);

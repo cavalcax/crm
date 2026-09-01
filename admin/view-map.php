@@ -24,11 +24,11 @@ if (!empty($client_ids)) {
     $stmt->execute($params);
     $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Fetch Intentions for these clients
+    // Fetch Active Intentions for these clients
     $sqlIntentions = "SELECT i.*, cat.name as category_name 
                      FROM " . TABLE_NAME . "intentions i 
                      LEFT JOIN " . TABLE_NAME . "categories cat ON i.category_id = cat.id 
-                     WHERE i.client_id IN ($placeholders)
+                     WHERE i.client_id IN ($placeholders) AND (i.status = 'active' OR i.status IS NULL)
                      ORDER BY i.created_at DESC";
     $stmtInt = $pdo->prepare($sqlIntentions);
     $stmtInt->execute($client_ids);
