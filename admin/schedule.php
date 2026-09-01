@@ -4,6 +4,7 @@ require_once '../helpers/functions.php';
 
 requireLogin();
 $user_id = $_SESSION['user_id'];
+$isAdmin = isAdmin();
 $pageTitle = 'Agenda';
 
 // Handle Delete Event Action
@@ -11,24 +12,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['delete_event'])) {
         $id = intval($_POST['id']);
 
-        // Ensure event belongs to user
-        $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "schedule WHERE id = ? AND user_id = ?");
-        $stmt->execute([$id, $user_id]);
+        if ($isAdmin) {
+            $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "schedule WHERE id = ?");
+            $stmt->execute([$id]);
+        } else {
+            $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "schedule WHERE id = ? AND user_id = ?");
+            $stmt->execute([$id, $user_id]);
+        }
 
         header("Location: schedule.php");
         exit;
     }
 }
 
-// Fetch Events
-$stmt = $pdo->prepare("
-    SELECT s.*, c.name as client_name 
-    FROM " . TABLE_NAME . "schedule s 
-    LEFT JOIN " . TABLE_NAME . "clients c ON s.client_id = c.id 
-    WHERE s.user_id = ? 
-    ORDER BY s.start_time ASC
-");
-$stmt->execute([$user_id]);
+// Fetch Events (Admin sees all, Operator sees own)
+if ($isAdmin) {
+    $stmt = $pdo->prepare("
+        SELECT s.*, c.name as client_name, u.name as operator_name 
+        FROM " . TABLE_NAME . "schedule s 
+        LEFT JOIN " . TABLE_NAME . "clients c ON s.client_id = c.id 
+        LEFT JOIN " . TABLE_NAME . "users u ON s.user_id = u.id 
+        ORDER BY s.start_time ASC
+    ");
+    $stmt->execute();
+} else {
+    $stmt = $pdo->prepare("
+        SELECT s.*, c.name as client_name, u.name as operator_name 
+        FROM " . TABLE_NAME . "schedule s 
+        LEFT JOIN " . TABLE_NAME . "clients c ON s.client_id = c.id 
+        LEFT JOIN " . TABLE_NAME . "users u ON s.user_id = u.id 
+        WHERE s.user_id = ? 
+        ORDER BY s.start_time ASC
+    ");
+    $stmt->execute([$user_id]);
+}
 $events = $stmt->fetchAll();
 
 $monthsPt = [
@@ -216,6 +233,41 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
                                     </p>
                                     <?php endif; ?>
 
+                                    <?php if (!empty($event['banner_image'])): ?>
+                                        <div class="mt-3 mb-2 rounded-xl overflow-hidden border border-amber-200 shadow-sm max-w-md">
+                                            <a href="../<?php echo htmlspecialchars($event['banner_image']); ?>" target="_blank" title="Clique para ampliar o banner">
+                                                <img src="../<?php echo htmlspecialchars($event['banner_image']); ?>" alt="Banner do Leilão" class="w-full h-auto object-cover max-h-56 hover:scale-102 transition duration-200">
+                                            </a>
+                                        </div>
+                                    <?php endif; ?>
+
+                                    <?php if ($event['type'] === 'auction' && (!empty($event['auction_lots_link']) || !empty($event['auction_live_link']))): ?>
+                                        <div class="flex flex-wrap items-center gap-2 mt-3 pt-2 border-t border-amber-100">
+                                            <?php if (!empty($event['auction_lots_link'])): ?>
+                                                <a href="<?php echo htmlspecialchars($event['auction_lots_link']); ?>" target="_blank"
+                                                    class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-sm hover:shadow transition transform hover:-translate-y-0.5"
+                                                    title="Ver Vídeo dos Lotes">
+                                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                    </svg>
+                                                    <span>📹 Ver Vídeo dos Lotes</span>
+                                                </a>
+                                            <?php endif; ?>
+
+                                            <?php if (!empty($event['auction_live_link'])): ?>
+                                                <a href="<?php echo htmlspecialchars($event['auction_live_link']); ?>" target="_blank"
+                                                    class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs shadow-sm hover:shadow transition transform hover:-translate-y-0.5"
+                                                    title="Assistir Transmissão Ao Vivo">
+                                                    <svg class="w-4 h-4 text-white animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                                                    </svg>
+                                                    <span>🔴 Transmissão Ao Vivo</span>
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
+
                                     <?php if ($event['observation']): ?>
                                     <p class="text-sm text-gray-600 mt-2 italic bg-gray-50 p-2 rounded-lg border border-gray-100">
                                         "<?php echo htmlspecialchars($event['observation']); ?>"
@@ -223,10 +275,17 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
                                     <?php endif; ?>
                                 </div>
                                 <div class="flex flex-col items-end gap-2 flex-shrink-0">
-                                    <span
-                                        class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase <?php echo $typeClass; ?> event-type border border-current/20">
-                                        <?php echo $typeLabel; ?>
-                                    </span>
+                                    <div class="flex items-center gap-1.5">
+                                        <?php if ($isAdmin && !empty($event['operator_name'])): ?>
+                                            <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium border border-slate-200" title="Criado por">
+                                                👤 <?php echo htmlspecialchars($event['operator_name']); ?>
+                                            </span>
+                                        <?php endif; ?>
+                                        <span
+                                            class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase <?php echo $typeClass; ?> event-type border border-current/20">
+                                            <?php echo $typeLabel; ?>
+                                        </span>
+                                    </div>
 
                                     <div class="flex items-center gap-1.5 mt-1">
                                         <a href="schedule-edit.php?id=<?php echo $event['id']; ?>"

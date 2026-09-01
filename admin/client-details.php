@@ -4,6 +4,7 @@ require_once '../helpers/functions.php';
 
 requireLogin();
 $user_id = $_SESSION['user_id'];
+$isAdmin = isAdmin();
 $pageTitle = 'Detalhes do Cliente';
 
 if (!isset($_GET['id'])) {
@@ -11,28 +12,38 @@ if (!isset($_GET['id'])) {
     exit;
 }
 
-$client_id = $_GET['id'];
+$client_id = intval($_GET['id']);
 
-// Fetch Client Info
-$stmt = $pdo->prepare("SELECT c.* FROM " . TABLE_NAME . "clients c WHERE c.id = ? AND c.user_id = ?");
-$stmt->execute([$client_id, $user_id]);
+// Fetch Client Info with responsible operator
+$stmt = $pdo->prepare("
+    SELECT c.*, u.name as operator_name 
+    FROM " . TABLE_NAME . "clients c 
+    LEFT JOIN " . TABLE_NAME . "users u ON c.user_id = u.id 
+    WHERE c.id = ?
+");
+$stmt->execute([$client_id]);
 $client = $stmt->fetch();
 
 if (!$client) {
-    echo "Cliente não encontrado ou acesso negado.";
+    echo "Cliente não encontrado.";
     exit;
 }
+
+$canEdit = canEditClient($client['user_id']);
+
 // Handle Attend Registration -> set status to 'Atendido' and redirect to WhatsApp
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['attend_client']) || isset($_POST['approve_client']))) {
-    $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET status = 'Atendido' WHERE id = ? AND user_id = ?");
-    $stmt->execute([$client_id, $user_id]);
+    if ($canEdit) {
+        $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET status = 'Atendido' WHERE id = ?");
+        $stmt->execute([$client_id]);
 
-    $phoneClean = preg_replace('/[^0-9]/', '', $client['phone'] ?? '');
-    if (!empty($phoneClean)) {
-        $msg = buildClientApprovalWelcomeMessage($client);
-        $waUrl = "https://wa.me/+55" . $phoneClean . "?text=" . rawurlencode($msg);
-        header("Location: " . $waUrl);
-        exit;
+        $phoneClean = preg_replace('/[^0-9]/', '', $client['phone'] ?? '');
+        if (!empty($phoneClean)) {
+            $msg = buildClientApprovalWelcomeMessage($client);
+            $waUrl = "https://wa.me/+55" . $phoneClean . "?text=" . rawurlencode($msg);
+            header("Location: " . $waUrl);
+            exit;
+        }
     }
     header("Location: client-details.php?id=" . $client_id);
     exit;
@@ -40,16 +51,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['attend_client']) || 
 
 // Handle Send to Embral -> set status to 'Embral' and redirect to client-pdf.php
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_embral'])) {
-    $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET status = 'Embral' WHERE id = ? AND user_id = ?");
-    $stmt->execute([$client_id, $user_id]);
-    header("Location: client-pdf.php?id=" . $client_id . "&sent=embral");
+    if ($canEdit) {
+        $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET status = 'Embral' WHERE id = ?");
+        $stmt->execute([$client_id]);
+        header("Location: client-pdf.php?id=" . $client_id . "&sent=embral");
+        exit;
+    }
+    header("Location: client-details.php?id=" . $client_id);
     exit;
 }
 
 // Handle Toggle Potential Lead
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_potential'])) {
-    $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET is_potential = IF(is_potential=1, 0, 1) WHERE id = ? AND user_id = ?");
-    $stmt->execute([$client_id, $user_id]);
+    if ($canEdit) {
+        $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET is_potential = IF(is_potential=1, 0, 1) WHERE id = ?");
+        $stmt->execute([$client_id]);
+    }
     header("Location: client-details.php?id=" . $client_id);
     exit;
 }
@@ -71,8 +88,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_interaction'])) {
 // Handle Delete Interaction
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_interaction'])) {
     $interaction_id = intval($_POST['interaction_id']);
-    $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "interactions WHERE id = ? AND client_id = ? AND user_id = ?");
-    $stmt->execute([$interaction_id, $client_id, $user_id]);
+    if ($isAdmin) {
+        $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "interactions WHERE id = ? AND client_id = ?");
+        $stmt->execute([$interaction_id, $client_id]);
+    } else {
+        $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "interactions WHERE id = ? AND client_id = ? AND user_id = ?");
+        $stmt->execute([$interaction_id, $client_id, $user_id]);
+    }
     header("Location: client-details.php?id=" . $client_id);
     exit;
 }
@@ -118,9 +140,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_intention'])) 
     exit;
 }
 
-// Fetch Interactions
-$stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "interactions WHERE client_id = ? AND user_id = ? ORDER BY interaction_date DESC, created_at DESC");
-$stmt->execute([$client_id, $user_id]);
+// Fetch Interactions (Admin views all, Operator only views own interactions with client)
+if ($isAdmin) {
+    $stmt = $pdo->prepare("
+        SELECT i.*, u.name as operator_name 
+        FROM " . TABLE_NAME . "interactions i 
+        LEFT JOIN " . TABLE_NAME . "users u ON i.user_id = u.id 
+        WHERE i.client_id = ? 
+        ORDER BY i.interaction_date DESC, i.created_at DESC
+    ");
+    $stmt->execute([$client_id]);
+} else {
+    $stmt = $pdo->prepare("
+        SELECT i.*, u.name as operator_name 
+        FROM " . TABLE_NAME . "interactions i 
+        LEFT JOIN " . TABLE_NAME . "users u ON i.user_id = u.id 
+        WHERE i.client_id = ? AND i.user_id = ? 
+        ORDER BY i.interaction_date DESC, i.created_at DESC
+    ");
+    $stmt->execute([$client_id, $user_id]);
+}
 $interactions = $stmt->fetchAll();
 
 // Fetch Intentions
@@ -129,13 +168,30 @@ $stmt->execute([$client_id]);
 $intentions = $stmt->fetchAll();
 
 // Fetch Categories for dropdown
-$stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "categories WHERE user_id = ?");
-$stmt->execute([$user_id]);
+$stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "categories ORDER BY name ASC");
+$stmt->execute();
 $categories = $stmt->fetchAll();
 
-// Fetch Schedules for this client
-$stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "schedule WHERE client_id = ? AND user_id = ? ORDER BY start_time DESC");
-$stmt->execute([$client_id, $user_id]);
+// Fetch Schedules for this client (Admin views all, Operator views own)
+if ($isAdmin) {
+    $stmt = $pdo->prepare("
+        SELECT s.*, u.name as operator_name 
+        FROM " . TABLE_NAME . "schedule s 
+        LEFT JOIN " . TABLE_NAME . "users u ON s.user_id = u.id 
+        WHERE s.client_id = ? 
+        ORDER BY s.start_time DESC
+    ");
+    $stmt->execute([$client_id]);
+} else {
+    $stmt = $pdo->prepare("
+        SELECT s.*, u.name as operator_name 
+        FROM " . TABLE_NAME . "schedule s 
+        LEFT JOIN " . TABLE_NAME . "users u ON s.user_id = u.id 
+        WHERE s.client_id = ? AND s.user_id = ? 
+        ORDER BY s.start_time DESC
+    ");
+    $stmt->execute([$client_id, $user_id]);
+}
 $clientSchedules = $stmt->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -199,20 +255,29 @@ $clientSchedules = $stmt->fetchAll();
                             <div class="flex items-start gap-4">
                                 <!-- Potential Star Toggle -->
                                 <div class="flex-shrink-0 pt-0.5">
-                                    <form method="POST" class="inline flex items-center">
-                                        <input type="hidden" name="toggle_potential" value="1">
-                                        <button type="submit"
-                                            class="p-1 rounded-full hover:bg-amber-50 focus:outline-none transition duration-150 transform hover:scale-110 cursor-pointer <?php echo !empty($client['is_potential']) ? 'text-amber-400 hover:text-amber-500' : 'text-gray-300 hover:text-amber-400'; ?>"
-                                            title="<?php echo !empty($client['is_potential']) ? 'Remover marcação de Potencial' : 'Marcar como Cliente em Potencial'; ?>">
-                                            <svg class="w-10 h-10 sm:w-11 sm:h-11"
-                                                fill="<?php echo !empty($client['is_potential']) ? 'currentColor' : 'none'; ?>"
-                                                stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z">
-                                                </path>
+                                    <?php if ($canEdit): ?>
+                                        <form method="POST" class="inline flex items-center">
+                                            <input type="hidden" name="toggle_potential" value="1">
+                                            <button type="submit"
+                                                class="p-1 rounded-full hover:bg-amber-50 focus:outline-none transition duration-150 transform hover:scale-110 cursor-pointer <?php echo !empty($client['is_potential']) ? 'text-amber-400 hover:text-amber-500' : 'text-gray-300 hover:text-amber-400'; ?>"
+                                                title="<?php echo !empty($client['is_potential']) ? 'Remover marcação de Potencial' : 'Marcar como Cliente em Potencial'; ?>">
+                                                <svg class="w-10 h-10 sm:w-11 sm:h-11"
+                                                    fill="<?php echo !empty($client['is_potential']) ? 'currentColor' : 'none'; ?>"
+                                                    stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z">
+                                                    </path>
+                                                </svg>
+                                            </button>
+                                        </form>
+                                    <?php else: ?>
+                                        <span class="p-1 inline-block <?php echo !empty($client['is_potential']) ? 'text-amber-400' : 'text-gray-200'; ?>"
+                                            title="<?php echo !empty($client['is_potential']) ? 'Cliente em Potencial' : 'Não marcado como Potencial'; ?>">
+                                            <svg class="w-10 h-10 sm:w-11 sm:h-11" fill="<?php echo !empty($client['is_potential']) ? 'currentColor' : 'none'; ?>" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
                                             </svg>
-                                        </button>
-                                    </form>
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
 
                                 <div class="flex-1 min-w-0">
@@ -246,6 +311,12 @@ $clientSchedules = $stmt->fetchAll();
                                             <span
                                                 class="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-bold border border-green-300">
                                                 Ativo
+                                            </span>
+                                        <?php endif; ?>
+
+                                        <?php if ($client['user_id'] != $user_id): ?>
+                                            <span class="bg-slate-100 text-slate-700 text-xs px-2.5 py-1 rounded-md font-semibold border border-slate-200" title="Operador Responsável por este cliente">
+                                                👤 Responsável: <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Operador'); ?>
                                             </span>
                                         <?php endif; ?>
                                     </div>
@@ -332,8 +403,8 @@ $clientSchedules = $stmt->fetchAll();
 
                             <!-- Right: Action Buttons -->
                             <div class="flex flex-wrap items-center gap-2 xl:justify-end flex-shrink-0">
-                                <!-- Atendido (quando status for Novo / Pré-cadastro) -->
-                                <?php if (in_array($client['status'] ?? '', ['Novo', 'Pré-cadastro'])): ?>
+                                <!-- Atendido (quando status for Novo / Pré-cadastro e usuário puder editar) -->
+                                <?php if ($canEdit && in_array($client['status'] ?? '', ['Novo', 'Pré-cadastro'])): ?>
                                     <?php
                                     $detailPhoneClean = preg_replace('/[^0-9]/', '', $client['phone'] ?? '');
                                     $detailApprovalMsg = buildClientApprovalWelcomeMessage($client);
@@ -355,8 +426,8 @@ $clientSchedules = $stmt->fetchAll();
                                     </form>
                                 <?php endif; ?>
 
-                                <!-- Enviar para Embral (quando status for Atendido) -->
-                                <?php if (($client['status'] ?? '') === 'Atendido'): ?>
+                                <!-- Enviar para Embral (quando status for Atendido e usuário puder editar) -->
+                                <?php if ($canEdit && ($client['status'] ?? '') === 'Atendido'): ?>
                                     <form method="POST" class="inline"
                                         onsubmit="window.open('client-pdf.php?id=<?php echo $client['id']; ?>&sent=embral', '_blank');">
                                         <input type="hidden" name="send_embral" value="1">
@@ -372,6 +443,18 @@ $clientSchedules = $stmt->fetchAll();
                                         </button>
                                     </form>
                                 <?php endif; ?>
+
+                                <!-- Agendar Compromisso -->
+                                <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>"
+                                    class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5"
+                                    title="Agendar Compromisso">
+                                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                                        </path>
+                                    </svg>
+                                    Agendar
+                                </a>
 
                                 <!-- WhatsApp -->
                                 <?php if (!empty($client['phone'])): ?>
@@ -413,32 +496,31 @@ $clientSchedules = $stmt->fetchAll();
                                     PDF
                                 </a>
 
-                                <!-- Editar -->
-                                <a href="client-edit.php?id=<?php echo $client['id']; ?>"
-                                    class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5"
-                                    title="Editar Dados do Cliente">
-                                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
-                                        </path>
-                                    </svg>
-                                    Editar
-                                </a>
-
-                                <!-- Mapa -->
-                                <?php if (!empty($client['latitude']) && !empty($client['longitude'])): ?>
-                                    <a href="https://www.google.com/maps/search/?api=1&query=<?php echo $client['latitude']; ?>,<?php echo $client['longitude']; ?>"
-                                        target="_blank"
-                                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5"
-                                        title="Ver Localização no Google Maps">
+                                <?php if ($canEdit): ?>
+                                    <!-- Editar (Somente Dono ou Admin) -->
+                                    <a href="client-edit.php?id=<?php echo $client['id']; ?>"
+                                        class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5"
+                                        title="Editar Dados do Cliente">
                                         <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7">
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
                                             </path>
                                         </svg>
-                                        Mapa
+                                        Editar
                                     </a>
                                 <?php endif; ?>
+
+                                <!-- Mapa -->
+                                <a href="map-selector.php?q=<?php echo urlencode($client['name']); ?>"
+                                    class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5"
+                                    title="Ver no Mapa de Clientes">
+                                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7">
+                                        </path>
+                                    </svg>
+                                    Mapa
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -481,10 +563,17 @@ $clientSchedules = $stmt->fetchAll();
                                 ?>
                                 <div class="bg-brand-50 p-4 rounded-xl border border-brand-100 hover:shadow-md transition">
                                     <div class="flex justify-between items-start mb-2">
-                                        <span
-                                            class="text-xs font-bold px-2 py-0.5 rounded-full border <?php echo $csTypeClass; ?>">
-                                            <?php echo $csTypeLabels[$cs['type']] ?? 'Outro'; ?>
-                                        </span>
+                                        <div class="flex items-center gap-1.5">
+                                            <span
+                                                class="text-xs font-bold px-2 py-0.5 rounded-full border <?php echo $csTypeClass; ?>">
+                                                <?php echo $csTypeLabels[$cs['type']] ?? 'Outro'; ?>
+                                            </span>
+                                            <?php if ($isAdmin && !empty($cs['operator_name'])): ?>
+                                                <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium border border-slate-200">
+                                                    👤 <?php echo htmlspecialchars($cs['operator_name']); ?>
+                                                </span>
+                                            <?php endif; ?>
+                                        </div>
                                         <a href="schedule-edit.php?id=<?php echo $cs['id']; ?>"
                                             class="text-xs font-semibold text-brand-700 hover:text-brand-900 hover:underline">
                                             Editar
@@ -512,6 +601,34 @@ $clientSchedules = $stmt->fetchAll();
                                             <?php echo htmlspecialchars(implode(' - ', array_filter([$cs['city'], $cs['uf']]))); ?>
                                         </p>
                                     <?php endif; ?>
+
+                                    <?php if (!empty($cs['banner_image'])): ?>
+                                        <div class="mt-2 mb-2 rounded-lg overflow-hidden border border-amber-200 shadow-sm max-h-36">
+                                            <a href="../<?php echo htmlspecialchars($cs['banner_image']); ?>" target="_blank">
+                                                <img src="../<?php echo htmlspecialchars($cs['banner_image']); ?>" alt="Banner do Leilão" class="w-full h-auto object-cover max-h-36 hover:scale-102 transition duration-150">
+                                            </a>
+                                        </div>
+                                    <?php endif; ?>
+
+                                    <?php if ($cs['type'] === 'auction' && (!empty($cs['auction_lots_link']) || !empty($cs['auction_live_link']))): ?>
+                                        <div class="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-amber-100">
+                                            <?php if (!empty($cs['auction_lots_link'])): ?>
+                                                <a href="<?php echo htmlspecialchars($cs['auction_lots_link']); ?>" target="_blank"
+                                                    class="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-md text-[11px] shadow-sm transition"
+                                                    title="Ver Vídeo dos Lotes">
+                                                    📹 Vídeo Lotes
+                                                </a>
+                                            <?php endif; ?>
+                                            <?php if (!empty($cs['auction_live_link'])): ?>
+                                                <a href="<?php echo htmlspecialchars($cs['auction_live_link']); ?>" target="_blank"
+                                                    class="inline-flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded-md text-[11px] shadow-sm transition"
+                                                    title="Assistir Transmissão Ao Vivo">
+                                                    🔴 Ao Vivo
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
+
                                     <?php if (!empty($cs['observation'])): ?>
                                         <p class="text-xs text-gray-600 italic mt-2 line-clamp-2">
                                             "<?php echo htmlspecialchars($cs['observation']); ?>"</p>
@@ -541,8 +658,10 @@ $clientSchedules = $stmt->fetchAll();
                             </span>
                             Perfil Comercial
                         </h3>
-                        <a href="client-edit.php?id=<?php echo $client['id']; ?>"
-                            class="text-xs font-bold text-brand-600 hover:text-brand-800 underline">Editar Dados</a>
+                        <?php if ($canEdit): ?>
+                            <a href="client-edit.php?id=<?php echo $client['id']; ?>"
+                                class="text-xs font-bold text-brand-600 hover:text-brand-800 underline">Editar Dados</a>
+                        <?php endif; ?>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

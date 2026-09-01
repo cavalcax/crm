@@ -14,12 +14,12 @@ if (!isset($_GET['id'])) {
 $client_id = $_GET['id'];
 
 // Fetch Client Info
-$stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "clients WHERE id = ? AND user_id = ?");
-$stmt->execute([$client_id, $user_id]);
+$stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "clients WHERE id = ?");
+$stmt->execute([$client_id]);
 $client = $stmt->fetch();
 
-if (!$client) {
-    echo "Cliente não encontrado ou acesso negado.";
+if (!$client || !canEditClient($client['user_id'])) {
+    echo "Cliente não encontrado ou você não tem permissão para editá-lo.";
     exit;
 }
 
@@ -27,8 +27,8 @@ $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['delete_client'])) {
-        $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "clients WHERE id = ? AND user_id = ?");
-        $stmt->execute([$client_id, $user_id]);
+        $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "clients WHERE id = ?");
+        $stmt->execute([$client_id]);
         header("Location: clients.php");
         exit;
     }
@@ -50,8 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $breed_interests = is_array($raw_breeds) ? implode(', ', array_map('sanitize', $raw_breeds)) : sanitize($raw_breeds);
 
     $purchase_animal_count = sanitize($_POST['purchase_animal_count'] ?? '');
-    $raw_categories = $_POST['animal_categories'] ?? [];
-    $animal_categories = is_array($raw_categories) ? implode(', ', array_map('sanitize', $raw_categories)) : sanitize($raw_categories);
+
+    $raw_animal_cats = $_POST['animal_categories'] ?? [];
+    $animal_categories = is_array($raw_animal_cats) ? implode(', ', array_map('sanitize', $raw_animal_cats)) : sanitize($raw_animal_cats);
 
     $production_system_opt = sanitize($_POST['production_system'] ?? '');
     $production_system_other = sanitize($_POST['production_system_other'] ?? '');
@@ -73,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 status = ?, is_potential = ?, payment_condition = ?, breed_interests = ?,
                 purchase_animal_count = ?, animal_categories = ?, production_system = ?,
                 is_milk_producer = ?, acquisition_reason = ?, animal_count_range = ?, milk_production_range = ? 
-            WHERE id = ? AND user_id = ?
+            WHERE id = ?
         ");
         $stmt->execute([
             $name,
@@ -96,8 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $acquisition_reason,
             $animal_count_range,
             $milk_production_range,
-            $client_id,
-            $user_id
+            $client_id
         ]);
         header("Location: clients.php");
         exit;

@@ -5,51 +5,66 @@ require_once '../helpers/functions.php';
 requireLogin();
 
 $user_id = $_SESSION['user_id'];
+$scope = isset($_GET['scope']) && in_array($_GET['scope'], ['mine', 'all']) ? $_GET['scope'] : 'mine';
 
-// Get client counts by status
+$params = ($scope === 'mine') ? [$user_id] : [];
+
 // Total Clientes
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients WHERE user_id = ?");
-$stmt->execute([$user_id]);
+$totWhere = ($scope === 'mine') ? " WHERE user_id = ?" : "";
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients" . $totWhere);
+$stmt->execute($params);
 $clientCount = $stmt->fetchColumn();
 
 // Novos
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients WHERE user_id = ? AND (status = 'Novo' OR status = 'Pré-cadastro')");
-$stmt->execute([$user_id]);
+$newWhere = ($scope === 'mine') ? " WHERE user_id = ? AND (status = 'Novo' OR status = 'Pré-cadastro')" : " WHERE (status = 'Novo' OR status = 'Pré-cadastro')";
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients" . $newWhere);
+$stmt->execute($params);
 $newClientCount = $stmt->fetchColumn();
 
 // Atendidos
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients WHERE user_id = ? AND status = 'Atendido'");
-$stmt->execute([$user_id]);
+$attWhere = ($scope === 'mine') ? " WHERE user_id = ? AND status = 'Atendido'" : " WHERE status = 'Atendido'";
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients" . $attWhere);
+$stmt->execute($params);
 $attendedClientCount = $stmt->fetchColumn();
 
 // Enviado Embral
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients WHERE user_id = ? AND status = 'Embral'");
-$stmt->execute([$user_id]);
+$embWhere = ($scope === 'mine') ? " WHERE user_id = ? AND status = 'Embral'" : " WHERE status = 'Embral'";
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients" . $embWhere);
+$stmt->execute($params);
 $embralClientCount = $stmt->fetchColumn();
 
 // Ativos
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients WHERE user_id = ? AND (status = 'Ativo' OR status IS NULL OR status = '')");
-$stmt->execute([$user_id]);
+$actWhere = ($scope === 'mine') ? " WHERE user_id = ? AND (status = 'Ativo' OR status IS NULL OR status = '')" : " WHERE (status = 'Ativo' OR status IS NULL OR status = '')";
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients" . $actWhere);
+$stmt->execute($params);
 $activeClientCount = $stmt->fetchColumn();
 
 // Inativos
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients WHERE user_id = ? AND status = 'Inativo'");
-$stmt->execute([$user_id]);
+$inactWhere = ($scope === 'mine') ? " WHERE user_id = ? AND status = 'Inativo'" : " WHERE status = 'Inativo'";
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "clients" . $inactWhere);
+$stmt->execute($params);
 $inactiveClientCount = $stmt->fetchColumn();
 
 // Eventos Futuros
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "schedule WHERE user_id = ? AND start_time >= NOW()");
-$stmt->execute([$user_id]);
+$eventWhere = ($scope === 'mine') ? " WHERE user_id = ? AND start_time >= NOW()" : " WHERE start_time >= NOW()";
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "schedule" . $eventWhere);
+$stmt->execute($params);
 $eventCount = $stmt->fetchColumn();
 
 // Intenções de Compra (Ativas)
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "intentions WHERE client_id IN (SELECT id FROM " . TABLE_NAME . "clients WHERE user_id = ?) AND type = 'buy' AND (status = 'active' OR status IS NULL)");
-$stmt->execute([$user_id]);
+$buyWhere = ($scope === 'mine') 
+    ? " WHERE client_id IN (SELECT id FROM " . TABLE_NAME . "clients WHERE user_id = ?) AND type = 'buy' AND (status = 'active' OR status IS NULL)"
+    : " WHERE type = 'buy' AND (status = 'active' OR status IS NULL)";
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "intentions" . $buyWhere);
+$stmt->execute($params);
 $buyCount = $stmt->fetchColumn();
 
 // Intenções de Venda (Ativas)
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "intentions WHERE client_id IN (SELECT id FROM " . TABLE_NAME . "clients WHERE user_id = ?) AND type = 'sell' AND (status = 'active' OR status IS NULL)");
-$stmt->execute([$user_id]);
+$sellWhere = ($scope === 'mine')
+    ? " WHERE client_id IN (SELECT id FROM " . TABLE_NAME . "clients WHERE user_id = ?) AND type = 'sell' AND (status = 'active' OR status IS NULL)"
+    : " WHERE type = 'sell' AND (status = 'active' OR status IS NULL)";
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM " . TABLE_NAME . "intentions" . $sellWhere);
+$stmt->execute($params);
 $sellCount = $stmt->fetchColumn();
 
 $pageTitle = 'Dashboard';
@@ -104,24 +119,43 @@ $pageTitle = 'Dashboard';
             <!-- Content -->
             <main class="flex-1 overflow-x-hidden overflow-y-auto bg-brand-50 p-6">
 
-                <div class="mb-6">
-                    <h1 class="text-3xl font-bold text-brand-900">Dashboard</h1>
+                <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h1 class="text-3xl font-bold text-brand-900">Dashboard</h1>
+                        <p class="text-gray-500 text-xs sm:text-sm mt-0.5">Visão geral e indicadores em tempo real.</p>
+                    </div>
                 </div>
 
-                <!-- Status dos Clientes (Grid 2 colunas compacto) -->
+                <!-- Status dos Clientes (Grid 2 colunas compacto com seletor de escopo) -->
                 <div class="mb-8">
-                    <h2 class="text-base font-bold uppercase tracking-wider text-brand-800 mb-4 flex items-center">
-                        <svg class="w-5 h-5 mr-2 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
-                            </path>
-                        </svg>
-                        Clientes por Status
-                    </h2>
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <h2 class="text-base font-bold uppercase tracking-wider text-brand-800 flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
+                                </path>
+                            </svg>
+                            Clientes por Status
+                        </h2>
+
+                        <!-- Seletor Clientes por Status: Apenas os Meus vs Todos do Sistema -->
+                        <div class="inline-flex p-1 bg-white border border-gray-200 rounded-xl shadow-xs text-xs font-semibold self-start sm:self-auto">
+                            <a href="index.php?scope=mine"
+                                class="px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 <?php echo $scope === 'mine' ? 'bg-brand-600 text-white shadow-xs font-bold' : 'text-gray-600 hover:text-brand-800 hover:bg-gray-50'; ?>"
+                                title="Filtrar dados apenas dos clientes vinculados a você">
+                                <span>👤</span> Apenas os Meus
+                            </a>
+                            <a href="index.php?scope=all"
+                                class="px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 <?php echo $scope === 'all' ? 'bg-brand-600 text-white shadow-xs font-bold' : 'text-gray-600 hover:text-brand-800 hover:bg-gray-50'; ?>"
+                                title="Filtrar dados de todos os clientes do CRM">
+                                <span>🌐</span> Todos do Sistema
+                            </a>
+                        </div>
+                    </div>
 
                     <div class="grid grid-cols-2 gap-3 sm:gap-4">
                         <!-- Card Novos -->
-                        <a href="clients.php?status=Novo"
+                        <a href="clients.php?status=Novo&scope=<?php echo $scope; ?>"
                             class="block bg-white rounded-lg shadow-sm hover:shadow p-3.5 sm:p-4 border-l-4 border-amber-500 hover:-translate-y-0.5 transition duration-150 transform cursor-pointer group">
                             <div class="flex items-center justify-between">
                                 <div>
@@ -141,7 +175,7 @@ $pageTitle = 'Dashboard';
                         </a>
 
                         <!-- Card Atendidos -->
-                        <a href="clients.php?status=Atendido"
+                        <a href="clients.php?status=Atendido&scope=<?php echo $scope; ?>"
                             class="block bg-white rounded-lg shadow-sm hover:shadow p-3.5 sm:p-4 border-l-4 border-purple-500 hover:-translate-y-0.5 transition duration-150 transform cursor-pointer group">
                             <div class="flex items-center justify-between">
                                 <div>
@@ -161,7 +195,7 @@ $pageTitle = 'Dashboard';
                         </a>
 
                         <!-- Card Enviado Embral -->
-                        <a href="clients.php?status=Embral"
+                        <a href="clients.php?status=Embral&scope=<?php echo $scope; ?>"
                             class="block bg-white rounded-lg shadow-sm hover:shadow p-3.5 sm:p-4 border-l-4 border-blue-500 hover:-translate-y-0.5 transition duration-150 transform cursor-pointer group">
                             <div class="flex items-center justify-between">
                                 <div>
@@ -181,7 +215,7 @@ $pageTitle = 'Dashboard';
                         </a>
 
                         <!-- Card Ativos -->
-                        <a href="clients.php?status=Ativo"
+                        <a href="clients.php?status=Ativo&scope=<?php echo $scope; ?>"
                             class="block bg-white rounded-lg shadow-sm hover:shadow p-3.5 sm:p-4 border-l-4 border-green-500 hover:-translate-y-0.5 transition duration-150 transform cursor-pointer group">
                             <div class="flex items-center justify-between">
                                 <div>
@@ -201,7 +235,7 @@ $pageTitle = 'Dashboard';
                         </a>
 
                         <!-- Card Inativos -->
-                        <a href="clients.php?status=Inativo"
+                        <a href="clients.php?status=Inativo&scope=<?php echo $scope; ?>"
                             class="block bg-white rounded-lg shadow-sm hover:shadow p-3.5 sm:p-4 border-l-4 border-gray-400 hover:-translate-y-0.5 transition duration-150 transform cursor-pointer group">
                             <div class="flex items-center justify-between">
                                 <div>
@@ -221,7 +255,7 @@ $pageTitle = 'Dashboard';
                         </a>
 
                         <!-- Card Total Geral -->
-                        <a href="clients.php"
+                        <a href="clients.php?scope=<?php echo $scope; ?>"
                             class="block bg-white rounded-lg shadow-sm hover:shadow p-3.5 sm:p-4 border-l-4 border-brand-500 hover:-translate-y-0.5 transition duration-150 transform cursor-pointer group">
                             <div class="flex items-center justify-between">
                                 <div>

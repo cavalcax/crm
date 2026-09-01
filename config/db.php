@@ -56,11 +56,36 @@ try {
             $pdo->exec("ALTER TABLE " . TABLE_NAME . "clients ADD COLUMN production_system VARCHAR(255) NULL");
         }
 
-        // Auto-migration: ensure notifications_enabled column exists on users table
+        // Auto-migration: ensure notifications_enabled, role and whatsapp columns exist on users table
         try {
             $userColumns = $pdo->query("SHOW COLUMNS FROM " . TABLE_NAME . "users")->fetchAll(PDO::FETCH_COLUMN);
             if (!in_array('notifications_enabled', $userColumns)) {
                 $pdo->exec("ALTER TABLE " . TABLE_NAME . "users ADD COLUMN notifications_enabled TINYINT(1) DEFAULT 1");
+            }
+            if (!in_array('role', $userColumns)) {
+                $pdo->exec("ALTER TABLE " . TABLE_NAME . "users ADD COLUMN role VARCHAR(20) DEFAULT 'operator'");
+                // Set first/main user as admin
+                $pdo->exec("UPDATE " . TABLE_NAME . "users SET role = 'admin' WHERE id = 1");
+            }
+            if (!in_array('whatsapp', $userColumns)) {
+                $pdo->exec("ALTER TABLE " . TABLE_NAME . "users ADD COLUMN whatsapp VARCHAR(50) NULL");
+            }
+            if (!in_array('is_active', $userColumns)) {
+                $pdo->exec("ALTER TABLE " . TABLE_NAME . "users ADD COLUMN is_active TINYINT(1) DEFAULT 1");
+            }
+        } catch (Exception $e) {}
+
+        // Auto-migration: ensure banner_image, auction_lots_link and auction_live_link columns exist on schedule table
+        try {
+            $schedColumns = $pdo->query("SHOW COLUMNS FROM " . TABLE_NAME . "schedule")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('banner_image', $schedColumns)) {
+                $pdo->exec("ALTER TABLE " . TABLE_NAME . "schedule ADD COLUMN banner_image VARCHAR(255) NULL");
+            }
+            if (!in_array('auction_lots_link', $schedColumns)) {
+                $pdo->exec("ALTER TABLE " . TABLE_NAME . "schedule ADD COLUMN auction_lots_link VARCHAR(500) NULL");
+            }
+            if (!in_array('auction_live_link', $schedColumns)) {
+                $pdo->exec("ALTER TABLE " . TABLE_NAME . "schedule ADD COLUMN auction_live_link VARCHAR(500) NULL");
             }
         } catch (Exception $e) {}
 

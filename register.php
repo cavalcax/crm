@@ -2,38 +2,18 @@
 require_once 'config/db.php';
 require_once 'helpers/functions.php';
 
+// Public registration is disabled. Only logged-in administrators can create new users.
 if (isLoggedIn()) {
+    if (isAdmin()) {
+        header("Location: admin/user-add.php");
+        exit;
+    }
     header("Location: admin/index.php");
     exit;
 }
 
-$error = '';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = sanitize($_POST['name']);
-    $email = sanitize($_POST['email']);
-    $password = $_POST['password'];
-    $confirm_password = $_POST['confirm_password'];
-
-    if ($password !== $confirm_password) {
-        $error = "As senhas não coincidem.";
-    } else {
-        $stmt = $pdo->prepare("SELECT id FROM " . TABLE_NAME . "users WHERE email = ?");
-        $stmt->execute([$email]);
-        if ($stmt->fetch()) {
-            $error = "Este e-mail já está em uso.";
-        } else {
-            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare("INSERT INTO " . TABLE_NAME . "users (name, email, password) VALUES (?, ?, ?)");
-            if ($stmt->execute([$name, $email, $hashed_password])) {
-                header("Location: login.php?registered=1");
-                exit;
-            } else {
-                $error = "Erro ao cadastrar. Tente novamente.";
-            }
-        }
-    }
-}
+header("Location: login.php");
+exit;
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -97,6 +77,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input
                     class="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
                     id="email" name="email" type="email" placeholder="seu@email.com" required>
+            </div>
+            <div class="mb-4">
+                <label class="block text-brand-800 text-sm font-bold mb-2" for="whatsapp">WhatsApp (Opcional)</label>
+                <input
+                    class="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                    id="whatsapp" name="whatsapp" type="text" placeholder="(00) 00000-0000">
             </div>
             <div class="mb-4">
                 <label class="block text-brand-800 text-sm font-bold mb-2" for="password">Senha</label>

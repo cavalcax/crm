@@ -22,6 +22,7 @@ function isLoggedIn()
                 if ($user) {
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['user_name'] = $user['name'];
+                    $_SESSION['user_role'] = $user['role'] ?? 'operator';
                     return true;
                 }
             } catch (Exception $e) {
@@ -35,6 +36,53 @@ function isLoggedIn()
     }
 
     return false;
+}
+
+function getCurrentUserRole()
+{
+    global $pdo;
+    if (isset($_SESSION['user_role'])) {
+        return $_SESSION['user_role'];
+    }
+    if (!empty($_SESSION['user_id']) && isset($pdo)) {
+        try {
+            $stmt = $pdo->prepare("SELECT role FROM " . TABLE_NAME . "users WHERE id = ?");
+            $stmt->execute([$_SESSION['user_id']]);
+            $role = $stmt->fetchColumn();
+            $_SESSION['user_role'] = $role ?: 'operator';
+            return $_SESSION['user_role'];
+        } catch (Exception $e) {}
+    }
+    return 'operator';
+}
+
+function isAdmin()
+{
+    return getCurrentUserRole() === 'admin';
+}
+
+function isOperator()
+{
+    return getCurrentUserRole() === 'operator';
+}
+
+function isTransporter()
+{
+    return getCurrentUserRole() === 'transporter';
+}
+
+function isClientUser()
+{
+    return getCurrentUserRole() === 'client';
+}
+
+function canEditClient($clientOwnerUserId)
+{
+    if (isAdmin()) {
+        return true;
+    }
+    $currentUserId = $_SESSION['user_id'] ?? 0;
+    return intval($clientOwnerUserId) === intval($currentUserId);
 }
 
 function requireLogin()
@@ -439,5 +487,36 @@ function renderMultiSelect($name, $label, $options, $selectedValues = [], $place
     </div>
     <?php
     return ob_get_clean();
+}
+
+function requireAdmin()
+{
+    requireLogin();
+    if (!isAdmin()) {
+        header("Location: " . (defined('BASE_URL') ? BASE_URL : '') . "/admin/index.php?error=unauthorized");
+        exit;
+    }
+}
+
+function buildNewUserWelcomeWhatsAppMessage($name, $email, $rawPassword, $loginUrl)
+{
+    $msg = "👋 Olá, *{$name}*!\n\n";
+    $msg .= "Seu acesso ao *CRM Vitor Müller* foi criado com sucesso.\n\n";
+    $msg .= "🔗 *Link de Acesso:* {$loginUrl}\n";
+    $msg .= "👤 *Usuário (E-mail):* {$email}\n";
+    $msg .= "🔑 *Senha:* {$rawPassword}\n\n";
+    $msg .= "Recomendamos alterar sua senha após o primeiro acesso no menu *Meu Perfil*.";
+    return $msg;
+}
+
+function buildPasswordResetWhatsAppMessage($name, $email, $newPassword, $loginUrl)
+{
+    $msg = "🔐 Olá, *{$name}*!\n\n";
+    $msg .= "Sua senha de acesso ao *CRM Vitor Müller* foi redefinida pelo administrador.\n\n";
+    $msg .= "🔗 *Link de Acesso:* {$loginUrl}\n";
+    $msg .= "👤 *Usuário (E-mail):* {$email}\n";
+    $msg .= "🔑 *Nova Senha:* {$newPassword}\n\n";
+    $msg .= "Por segurança, você pode alterá-la quando quiser na página de perfil do sistema.";
+    return $msg;
 }
 ?>

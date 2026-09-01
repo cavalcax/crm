@@ -20,22 +20,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $latitude = !empty($_POST['latitude']) ? $_POST['latitude'] : null;
     $longitude = !empty($_POST['longitude']) ? $_POST['longitude'] : null;
 
+    // Auction Specific Fields
+    $auction_lots_link = sanitize($_POST['auction_lots_link'] ?? '');
+    $auction_live_link = sanitize($_POST['auction_live_link'] ?? '');
+    $banner_image = null;
+
+    if (!empty($_FILES['banner_image']['name']) && $_FILES['banner_image']['error'] === UPLOAD_ERR_OK) {
+        $uploadDir = '../uploads/auctions/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+        $fileExt = strtolower(pathinfo($_FILES['banner_image']['name'], PATHINFO_EXTENSION));
+        $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+        if (in_array($fileExt, $allowedExts)) {
+            $fileName = 'auction_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $fileExt;
+            if (move_uploaded_file($_FILES['banner_image']['tmp_name'], $uploadDir . $fileName)) {
+                $banner_image = 'uploads/auctions/' . $fileName;
+            }
+        }
+    }
+
     if ($title && $date && $time) {
         $stmt = $pdo->prepare("
             INSERT INTO " . TABLE_NAME . "schedule (
-                user_id, client_id, title, type, start_time, observation, address, city, uf, latitude, longitude
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                user_id, client_id, title, type, start_time, observation, address, city, uf, latitude, longitude, banner_image, auction_lots_link, auction_live_link
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$user_id, $client_id, $title, $type, $start_time, $obs, $address, $city, $uf, $latitude, $longitude]);
+        $stmt->execute([$user_id, $client_id, $title, $type, $start_time, $obs, $address, $city, $uf, $latitude, $longitude, $banner_image, $auction_lots_link, $auction_live_link]);
 
         header("Location: schedule.php");
         exit;
     }
 }
 
-// Fetch Clients for dropdown
-$stmt = $pdo->prepare("SELECT id, name, farm_name, city, uf, address, latitude, longitude FROM " . TABLE_NAME . "clients WHERE user_id = ? ORDER BY name ASC");
-$stmt->execute([$user_id]);
+// Fetch All Clients for dropdown (Operators can schedule for any client)
+$stmt = $pdo->prepare("SELECT id, name, farm_name, city, uf, address, latitude, longitude FROM " . TABLE_NAME . "clients ORDER BY name ASC");
+$stmt->execute();
 $clients = $stmt->fetchAll();
 
 $states = getBrazilianStates();
@@ -199,7 +219,7 @@ $init_lng = $_POST['longitude'] ?? ($preselected_client['longitude'] ?? '');
                         </a>
                     </div>
 
-                    <form method="POST" class="space-y-6">
+                    <form method="POST" enctype="multipart/form-data" class="space-y-6">
                         <!-- Basic Info Section -->
                         <div>
                             <h3 class="text-lg font-bold text-brand-900 mb-4 pb-2 border-b border-gray-100">1. Informações do Compromisso</h3>
@@ -227,13 +247,42 @@ $init_lng = $_POST['longitude'] ?? ($preselected_client['longitude'] ?? '');
                                     </div>
                                     <div>
                                         <label class="block text-gray-700 text-sm font-bold mb-2">Tipo de Evento *</label>
-                                        <select name="type"
+                                        <select name="type" id="eventTypeSelect"
                                             class="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white">
                                             <option value="meeting">Reunião</option>
                                             <option value="visit">Visita</option>
                                             <option value="auction">Leilão</option>
                                             <option value="other">Outro</option>
                                         </select>
+                                    </div>
+                                </div>
+
+                                <!-- Auction Specific Fields (Conditional) -->
+                                <div id="auctionFieldsSection" class="hidden p-4 bg-amber-50/70 rounded-xl border border-amber-200 space-y-4 transition">
+                                    <div class="flex items-center gap-2 text-amber-900 font-bold text-sm">
+                                        <span>🏷️</span> Detalhes do Leilão
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-gray-700 text-xs font-bold mb-1">Banner do Leilão (Imagem / Cartaz)</label>
+                                        <input type="file" name="banner_image" accept="image/*"
+                                            class="block w-full text-xs text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-600 file:text-white hover:file:bg-amber-700 cursor-pointer bg-white border border-gray-300 rounded-lg p-1.5">
+                                        <p class="text-[11px] text-gray-500 mt-1">Formatos aceitos: JPG, PNG, WEBP. Tamanho recomendado: 1200x630px ou proporcional.</p>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-gray-700 text-xs font-bold mb-1">Vídeo dos Lotes (Link do YouTube / Vídeo)</label>
+                                            <input type="url" name="auction_lots_link"
+                                                placeholder="https://www.youtube.com/watch?v=..."
+                                                class="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-2.5 px-3 text-xs sm:text-sm text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white">
+                                        </div>
+                                        <div>
+                                            <label class="block text-gray-700 text-xs font-bold mb-1">Transmissão Ao Vivo (Link do YouTube / Live)</label>
+                                            <input type="url" name="auction_live_link"
+                                                placeholder="https://www.youtube.com/live/..."
+                                                class="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-2.5 px-3 text-xs sm:text-sm text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white">
+                                        </div>
                                     </div>
                                 </div>
 
@@ -387,6 +436,25 @@ $init_lng = $_POST['longitude'] ?? ($preselected_client['longitude'] ?? '');
                     setMarkerPosition(pos);
                 }
             });
+
+            // Toggle Auction Specific Fields
+            const typeSelect = document.getElementById('eventTypeSelect');
+            const auctionSection = document.getElementById('auctionFieldsSection');
+
+            function toggleAuctionFields() {
+                if (typeSelect && auctionSection) {
+                    if (typeSelect.value === 'auction') {
+                        auctionSection.classList.remove('hidden');
+                    } else {
+                        auctionSection.classList.add('hidden');
+                    }
+                }
+            }
+
+            if (typeSelect) {
+                typeSelect.addEventListener('change', toggleAuctionFields);
+                toggleAuctionFields();
+            }
         });
 
         function initMap() {

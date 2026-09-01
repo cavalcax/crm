@@ -4,34 +4,43 @@ require_once '../helpers/functions.php';
 
 requireLogin();
 $user_id = $_SESSION['user_id'];
-$pageTitle = 'Meus Clientes';
+$isAdmin = isAdmin();
+$pageTitle = 'Clientes';
 
 // Handle Delete Client
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_client'])) {
-    $client_id_to_delete = $_POST['client_id'];
-    $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "clients WHERE id = ? AND user_id = ?");
-    $stmt->execute([$client_id_to_delete, $user_id]);
+    $client_id_to_delete = intval($_POST['client_id']);
+    $stmt = $pdo->prepare("SELECT user_id FROM " . TABLE_NAME . "clients WHERE id = ?");
+    $stmt->execute([$client_id_to_delete]);
+    $targetClient = $stmt->fetch();
+
+    if ($targetClient && canEditClient($targetClient['user_id'])) {
+        $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "clients WHERE id = ?");
+        $stmt->execute([$client_id_to_delete]);
+    }
     header("Location: clients.php");
     exit;
 }
 
 // Handle Attend Client (Novo -> set status to 'Atendido' and open WhatsApp)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['attend_client']) || isset($_POST['approve_client']))) {
-    $client_id_to_attend = $_POST['client_id'];
-    $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET status = 'Atendido' WHERE id = ? AND user_id = ?");
-    $stmt->execute([$client_id_to_attend, $user_id]);
-
-    $stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "clients WHERE id = ? AND user_id = ?");
-    $stmt->execute([$client_id_to_attend, $user_id]);
+    $client_id_to_attend = intval($_POST['client_id']);
+    $stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "clients WHERE id = ?");
+    $stmt->execute([$client_id_to_attend]);
     $attendedClient = $stmt->fetch();
 
-    if ($attendedClient && !empty($attendedClient['phone'])) {
-        $phoneClean = preg_replace('/[^0-9]/', '', $attendedClient['phone']);
-        if (!empty($phoneClean)) {
-            $msg = buildClientApprovalWelcomeMessage($attendedClient);
-            $waUrl = "https://wa.me/+55" . $phoneClean . "?text=" . rawurlencode($msg);
-            header("Location: " . $waUrl);
-            exit;
+    if ($attendedClient && canEditClient($attendedClient['user_id'])) {
+        $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET status = 'Atendido' WHERE id = ?");
+        $stmt->execute([$client_id_to_attend]);
+
+        if (!empty($attendedClient['phone'])) {
+            $phoneClean = preg_replace('/[^0-9]/', '', $attendedClient['phone']);
+            if (!empty($phoneClean)) {
+                $msg = buildClientApprovalWelcomeMessage($attendedClient);
+                $waUrl = "https://wa.me/+55" . $phoneClean . "?text=" . rawurlencode($msg);
+                header("Location: " . $waUrl);
+                exit;
+            }
         }
     }
     header("Location: clients.php");
@@ -40,23 +49,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['attend_client']) || 
 
 // Handle Send to Embral (Atendido -> set status to 'Embral' and open PDF)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_embral'])) {
-    $client_id_to_embral = $_POST['client_id'];
-    $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET status = 'Embral' WHERE id = ? AND user_id = ?");
-    $stmt->execute([$client_id_to_embral, $user_id]);
-    header("Location: client-pdf.php?id=" . $client_id_to_embral . "&sent=embral");
+    $client_id_to_embral = intval($_POST['client_id']);
+    $stmt = $pdo->prepare("SELECT user_id FROM " . TABLE_NAME . "clients WHERE id = ?");
+    $stmt->execute([$client_id_to_embral]);
+    $targetClient = $stmt->fetch();
+
+    if ($targetClient && canEditClient($targetClient['user_id'])) {
+        $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET status = 'Embral' WHERE id = ?");
+        $stmt->execute([$client_id_to_embral]);
+        header("Location: client-pdf.php?id=" . $client_id_to_embral . "&sent=embral");
+        exit;
+    }
+    header("Location: clients.php");
     exit;
 }
 
 // Handle Toggle Potential Lead
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_potential'])) {
-    $client_id_to_toggle = $_POST['client_id'];
-    $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET is_potential = IF(is_potential=1, 0, 1) WHERE id = ? AND user_id = ?");
-    $stmt->execute([$client_id_to_toggle, $user_id]);
+    $client_id_to_toggle = intval($_POST['client_id']);
+    $stmt = $pdo->prepare("SELECT user_id FROM " . TABLE_NAME . "clients WHERE id = ?");
+    $stmt->execute([$client_id_to_toggle]);
+    $targetClient = $stmt->fetch();
+
+    if ($targetClient && canEditClient($targetClient['user_id'])) {
+        $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET is_potential = IF(is_potential=1, 0, 1) WHERE id = ?");
+        $stmt->execute([$client_id_to_toggle]);
+    }
     header("Location: clients.php");
     exit;
 }
 
-// Fetch Clients with sorting (Default: newest date DESC)
+// Fetch All Clients for both Admin and Operator, with responsible operator name
 $sort = $_GET['sort'] ?? 'date';
 $order = isset($_GET['order']) && strtoupper($_GET['order']) === 'ASC' ? 'ASC' : 'DESC';
 
@@ -78,12 +101,12 @@ switch ($sort) {
 }
 
 $stmt = $pdo->prepare("
-    SELECT c.* 
+    SELECT c.*, u.name as operator_name 
     FROM " . TABLE_NAME . "clients c 
-    WHERE c.user_id = ? 
+    LEFT JOIN " . TABLE_NAME . "users u ON c.user_id = u.id
     ORDER BY {$orderBy}
 ");
-$stmt->execute([$user_id]);
+$stmt->execute();
 $clients = $stmt->fetchAll();
 
 // Build encrypted pre-registration link for current user
@@ -91,6 +114,7 @@ $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : 
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $precadastroUrl = $protocol . "://" . $host . "/precadastro.php?ref=" . encryptUserId($user_id);
 $statusFilterParam = $_GET['status'] ?? '';
+$scopeFilterParam = $_GET['scope'] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -162,9 +186,9 @@ $statusFilterParam = $_GET['status'] ?? '';
                     </a>
                 </div>
 
-                <!-- Search & Status Filter (65% Search, 35% Status) -->
-                <div class="mb-6 flex gap-2 sm:gap-4 items-center">
-                    <div class="relative w-[65%]">
+                <!-- Search & Filters (Search + Scope + Status) -->
+                <div class="mb-6 flex flex-wrap sm:flex-nowrap gap-2 sm:gap-4 items-center">
+                    <div class="relative flex-1 min-w-[200px]">
                         <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 sm:pl-3 pointer-events-none">
                             <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor"
                                 viewBox="0 0 24 24">
@@ -177,27 +201,37 @@ $statusFilterParam = $_GET['status'] ?? '';
                             placeholder="Buscar por nome, data, fazenda, telefone, cidade, UF...">
                     </div>
 
-                    <div class="w-[35%]">
+                    <!-- Scope Filter: Apenas os Meus vs Todos do Sistema -->
+                    <div class="w-full sm:w-48">
+                        <div class="relative">
+                            <select id="scopeFilter"
+                                class="w-full pl-2 sm:pl-3 pr-6 sm:pr-8 py-2 sm:py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm bg-white font-medium text-gray-700 text-xs sm:text-sm appearance-none cursor-pointer truncate">
+                                <option value="all" <?php echo $scopeFilterParam === 'all' ? 'selected' : ''; ?>>🌐 Todos do Sistema</option>
+                                <option value="mine" <?php echo $scopeFilterParam === 'mine' ? 'selected' : ''; ?>>👤 Apenas os Meus</option>
+                            </select>
+                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 sm:px-2.5 text-gray-500">
+                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status Filter -->
+                    <div class="w-full sm:w-44">
                         <div class="relative">
                             <select id="statusFilter"
                                 class="w-full pl-2 sm:pl-3 pr-6 sm:pr-8 py-2 sm:py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm bg-white font-medium text-gray-700 text-xs sm:text-sm appearance-none cursor-pointer truncate">
-                                <option value="" <?php echo empty($statusFilterParam) ? 'selected' : ''; ?>>Todos Status
-                                </option>
+                                <option value="" <?php echo empty($statusFilterParam) ? 'selected' : ''; ?>>Todos Status</option>
                                 <option value="Novo" <?php echo in_array($statusFilterParam, ['Novo', 'Pré-cadastro']) ? 'selected' : ''; ?>>🟡 Novos</option>
                                 <option value="Atendido" <?php echo $statusFilterParam === 'Atendido' ? 'selected' : ''; ?>>🟣 Atendidos</option>
-                                <option value="Embral" <?php echo $statusFilterParam === 'Embral' ? 'selected' : ''; ?>>🔵
-                                    Embral</option>
-                                <option value="Ativo" <?php echo $statusFilterParam === 'Ativo' ? 'selected' : ''; ?>>🟢
-                                    Ativos</option>
-                                <option value="Inativo" <?php echo $statusFilterParam === 'Inativo' ? 'selected' : ''; ?>>
-                                    ⚫ Inativos</option>
+                                <option value="Embral" <?php echo $statusFilterParam === 'Embral' ? 'selected' : ''; ?>>🔵 Embral</option>
+                                <option value="Ativo" <?php echo $statusFilterParam === 'Ativo' ? 'selected' : ''; ?>>🟢 Ativos</option>
+                                <option value="Inativo" <?php echo $statusFilterParam === 'Inativo' ? 'selected' : ''; ?>>⚫ Inativos</option>
                             </select>
-                            <div
-                                class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 sm:px-2.5 text-gray-500">
-                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19 9l-7 7-7-7"></path>
+                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 sm:px-2.5 text-gray-500">
+                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                 </svg>
                             </div>
                         </div>
@@ -250,41 +284,66 @@ $statusFilterParam = $_GET['status'] ?? '';
                             </thead>
                             <tbody id="clientsTableBody">
                                 <?php if (count($clients) > 0): ?>
-                                    <?php foreach ($clients as $client): ?>
+                                    <?php foreach ($clients as $client): 
+                                        $canEdit = canEditClient($client['user_id']);
+                                        $isMine = ((int)$client['user_id'] === (int)$user_id);
+                                    ?>
                                         <tr class="hover:bg-gray-50 transition client-row"
                                             data-name="<?php echo htmlspecialchars(mb_strtolower($client['name'], 'UTF-8')); ?>"
                                             data-date="<?php echo !empty($client['created_at']) ? strtotime($client['created_at']) : (int) $client['id']; ?>"
                                             data-city="<?php echo htmlspecialchars(mb_strtolower(($client['city'] ?? '') . ' ' . ($client['uf'] ?? ''), 'UTF-8')); ?>"
                                             data-status="<?php echo htmlspecialchars(mb_strtolower($client['status'] ?? '', 'UTF-8')); ?>"
-                                            data-phone="<?php echo preg_replace('/[^0-9]/', '', $client['phone'] ?? ''); ?>">
+                                            data-phone="<?php echo preg_replace('/[^0-9]/', '', $client['phone'] ?? ''); ?>"
+                                            data-user-id="<?php echo (int)$client['user_id']; ?>"
+                                            data-is-mine="<?php echo $isMine ? '1' : '0'; ?>">
                                             <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                                                 <div class="flex items-center">
                                                     <div class="flex-shrink-0 mr-3">
-                                                        <!-- Toggle Potential Button -->
-                                                        <form method="POST" class="inline flex items-center">
-                                                            <input type="hidden" name="client_id"
-                                                                value="<?php echo $client['id']; ?>">
-                                                            <input type="hidden" name="toggle_potential" value="1">
-                                                            <button type="submit"
-                                                                class="p-1 rounded-full hover:bg-amber-50 transition <?php echo !empty($client['is_potential']) ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-500'; ?>"
-                                                                title="<?php echo !empty($client['is_potential']) ? 'Remover marcação de Potencial' : 'Marcar como Cliente em Potencial'; ?>">
-                                                                <svg class="w-6 h-6"
-                                                                    fill="<?php echo !empty($client['is_potential']) ? 'currentColor' : 'none'; ?>"
-                                                                    stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                                        stroke-width="2"
-                                                                        d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z">
-                                                                    </path>
+                                                        <?php if ($canEdit): ?>
+                                                            <!-- Toggle Potential Button -->
+                                                            <form method="POST" class="inline flex items-center">
+                                                                <input type="hidden" name="client_id"
+                                                                    value="<?php echo $client['id']; ?>">
+                                                                <input type="hidden" name="toggle_potential" value="1">
+                                                                <button type="submit"
+                                                                    class="p-1 rounded-full hover:bg-amber-50 transition <?php echo !empty($client['is_potential']) ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-500'; ?>"
+                                                                    title="<?php echo !empty($client['is_potential']) ? 'Remover marcação de Potencial' : 'Marcar como Cliente em Potencial'; ?>">
+                                                                    <svg class="w-6 h-6"
+                                                                        fill="<?php echo !empty($client['is_potential']) ? 'currentColor' : 'none'; ?>"
+                                                                        stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                                            stroke-width="2"
+                                                                            d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z">
+                                                                        </path>
+                                                                    </svg>
+                                                                </button>
+                                                            </form>
+                                                        <?php else: ?>
+                                                            <span class="p-1 inline-block <?php echo !empty($client['is_potential']) ? 'text-amber-500' : 'text-gray-200'; ?>"
+                                                                title="<?php echo !empty($client['is_potential']) ? 'Cliente em Potencial' : 'Não marcado como Potencial'; ?>">
+                                                                <svg class="w-6 h-6" fill="<?php echo !empty($client['is_potential']) ? 'currentColor' : 'none'; ?>" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
                                                                 </svg>
-                                                            </button>
-                                                        </form>
+                                                            </span>
+                                                        <?php endif; ?>
                                                     </div>
                                                     <div>
-                                                        <a href="client-details.php?id=<?php echo $client['id']; ?>"
-                                                            class="text-gray-900 hover:text-brand-600 font-semibold hover:underline client-name inline-block"
-                                                            title="Ver detalhes de <?php echo htmlspecialchars($client['name']); ?>">
-                                                            <?php echo htmlspecialchars($client['name']); ?>
-                                                        </a>
+                                                        <div class="flex items-center flex-wrap gap-1.5">
+                                                            <a href="client-details.php?id=<?php echo $client['id']; ?>"
+                                                                class="text-gray-900 hover:text-brand-600 font-semibold hover:underline client-name inline-block"
+                                                                title="Ver detalhes de <?php echo htmlspecialchars($client['name']); ?>">
+                                                                <?php echo htmlspecialchars($client['name']); ?>
+                                                            </a>
+                                                            <?php if ($isMine): ?>
+                                                                <span class="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold border border-emerald-200" title="Cliente sob sua responsabilidade">
+                                                                    👤 Meu Cliente
+                                                                </span>
+                                                            <?php else: ?>
+                                                                <span class="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold border border-slate-300" title="Operador Responsável: <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro'); ?>">
+                                                                    👤 <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Operador'); ?>
+                                                                </span>
+                                                            <?php endif; ?>
+                                                        </div>
                                                         <?php if (!empty($client['farm_name'])): ?>
                                                             <p class="text-xs text-brand-700 font-medium client-farm">
                                                                 🏡 <?php echo htmlspecialchars($client['farm_name']); ?>
@@ -379,7 +438,7 @@ $statusFilterParam = $_GET['status'] ?? '';
                                                 <?php if (!empty($client['latitude']) && !empty($client['longitude'])): ?>
                                                     <a href="https://www.google.com/maps/search/?api=1&query=<?php echo $client['latitude']; ?>,<?php echo $client['longitude']; ?>"
                                                         target="_blank" class="text-blue-500 hover:text-blue-800"
-                                                        title="Ver no Mapa">
+                                                        title="Ver no Google Maps">
                                                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                                 d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z">
@@ -393,20 +452,19 @@ $statusFilterParam = $_GET['status'] ?? '';
                                                 <?php endif; ?>
                                             </td>
                                             <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                                                <div class="flex items-center space-x-3">
-                                                    <a href="client-edit.php?id=<?php echo $client['id']; ?>"
-                                                        class="text-yellow-600 hover:text-yellow-800" title="Editar">
-                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                                            viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                stroke-width="2"
-                                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
-                                                            </path>
+                                                <div class="flex items-center space-x-2.5">
+                                                    <!-- 1. Mapa -->
+                                                    <a href="map-selector.php?q=<?php echo urlencode($client['name']); ?>"
+                                                        class="text-emerald-600 hover:text-emerald-800 p-1 hover:bg-emerald-50 rounded transition" title="Ver no Mapa de Clientes">
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
                                                         </svg>
                                                     </a>
 
+                                                    <!-- 2. Agendar Compromisso -->
                                                     <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>"
-                                                        class="text-amber-600 hover:text-amber-800" title="Agendar Compromisso">
+                                                        class="text-amber-600 hover:text-amber-800 p-1 hover:bg-amber-50 rounded transition" title="Agendar Compromisso">
                                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                                 d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
@@ -414,8 +472,9 @@ $statusFilterParam = $_GET['status'] ?? '';
                                                         </svg>
                                                     </a>
 
+                                                    <!-- 3. Ficha PDF -->
                                                     <a href="client-pdf.php?id=<?php echo $client['id']; ?>" target="_blank"
-                                                        class="text-red-500 hover:text-red-700"
+                                                        class="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition"
                                                         title="Gerar PDF / Imprimir Ficha">
                                                         <svg class="w-5 h-5" fill="none" stroke="currentColor"
                                                             viewBox="0 0 24 24">
@@ -426,72 +485,86 @@ $statusFilterParam = $_GET['status'] ?? '';
                                                         </svg>
                                                     </a>
 
-                                                    <!-- Attend Client Button (Novo -> Atendido) -->
-                                                    <?php if (in_array($client['status'] ?? '', ['Novo', 'Pré-cadastro'])): ?>
-                                                        <?php
-                                                        $rowPhoneClean = preg_replace('/[^0-9]/', '', $client['phone'] ?? '');
-                                                        $rowApprovalMsg = buildClientApprovalWelcomeMessage($client);
-                                                        $rowWaApprovalUrl = !empty($rowPhoneClean) ? "https://wa.me/+55" . $rowPhoneClean . "?text=" . rawurlencode($rowApprovalMsg) : '';
-                                                        ?>
-                                                        <form method="POST" class="inline"
-                                                            onsubmit="if('<?php echo addslashes($rowWaApprovalUrl); ?>'){ window.open('<?php echo addslashes($rowWaApprovalUrl); ?>', '_blank'); }">
+                                                    <?php if ($canEdit): ?>
+                                                        <!-- 4. Editar (Somente Dono ou Admin) -->
+                                                        <a href="client-edit.php?id=<?php echo $client['id']; ?>"
+                                                            class="text-yellow-600 hover:text-yellow-800 p-1 hover:bg-yellow-50 rounded transition" title="Editar Informações">
+                                                            <svg class="w-5 h-5" fill="none" stroke="currentColor"
+                                                                viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                                    stroke-width="2"
+                                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
+                                                                </path>
+                                                            </svg>
+                                                        </a>
+
+                                                        <!-- Attend Client Button (Novo -> Atendido) -->
+                                                        <?php if (in_array($client['status'] ?? '', ['Novo', 'Pré-cadastro'])): ?>
+                                                            <?php
+                                                            $rowPhoneClean = preg_replace('/[^0-9]/', '', $client['phone'] ?? '');
+                                                            $rowApprovalMsg = buildClientApprovalWelcomeMessage($client);
+                                                            $rowWaApprovalUrl = !empty($rowPhoneClean) ? "https://wa.me/+55" . $rowPhoneClean . "?text=" . rawurlencode($rowApprovalMsg) : '';
+                                                            ?>
+                                                            <form method="POST" class="inline"
+                                                                onsubmit="if('<?php echo addslashes($rowWaApprovalUrl); ?>'){ window.open('<?php echo addslashes($rowWaApprovalUrl); ?>', '_blank'); }">
+                                                                <input type="hidden" name="client_id"
+                                                                    value="<?php echo $client['id']; ?>">
+                                                                <input type="hidden" name="attend_client" value="1">
+                                                                <button type="submit" class="text-purple-600 hover:text-purple-800 p-1 hover:bg-purple-50 rounded transition cursor-pointer"
+                                                                    title="Marcar como Atendido (Alterar status para Atendido e abrir WhatsApp)">
+                                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor"
+                                                                        viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                                            stroke-width="2"
+                                                                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                                    </svg>
+                                                                </button>
+                                                            </form>
+                                                        <?php endif; ?>
+
+                                                        <!-- Send to Embral Button (Atendido -> Embral) -->
+                                                        <?php if (($client['status'] ?? '') === 'Atendido'): ?>
+                                                            <form method="POST" class="inline"
+                                                                onsubmit="window.open('client-pdf.php?id=<?php echo $client['id']; ?>&sent=embral', '_blank');">
+                                                                <input type="hidden" name="client_id"
+                                                                    value="<?php echo $client['id']; ?>">
+                                                                <input type="hidden" name="send_embral" value="1">
+                                                                <button type="submit" class="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition cursor-pointer"
+                                                                    title="Enviar dados para Embral (Alterar status para Embral e abrir Ficha/WhatsApp)">
+                                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor"
+                                                                        viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                                            stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
+                                                                        </path>
+                                                                    </svg>
+                                                                </button>
+                                                            </form>
+                                                        <?php endif; ?>
+
+                                                        <!-- Excluir -->
+                                                        <form method="POST" onsubmit="confirmDelete(event)" class="inline">
                                                             <input type="hidden" name="client_id"
                                                                 value="<?php echo $client['id']; ?>">
-                                                            <input type="hidden" name="attend_client" value="1">
-                                                            <button type="submit" class="text-purple-600 hover:text-purple-800"
-                                                                title="Marcar como Atendido (Alterar status para Atendido e abrir WhatsApp)">
+                                                            <input type="hidden" name="delete_client" value="1">
+                                                            <button type="submit" class="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition cursor-pointer"
+                                                                title="Excluir">
                                                                 <svg class="w-5 h-5" fill="none" stroke="currentColor"
                                                                     viewBox="0 0 24 24">
                                                                     <path stroke-linecap="round" stroke-linejoin="round"
                                                                         stroke-width="2"
-                                                                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                                </svg>
-                                                            </button>
-                                                        </form>
-                                                    <?php endif; ?>
-
-                                                    <!-- Send to Embral Button (Atendido -> Embral) -->
-                                                    <?php if (($client['status'] ?? '') === 'Atendido'): ?>
-                                                        <form method="POST" class="inline"
-                                                            onsubmit="window.open('client-pdf.php?id=<?php echo $client['id']; ?>&sent=embral', '_blank');">
-                                                            <input type="hidden" name="client_id"
-                                                                value="<?php echo $client['id']; ?>">
-                                                            <input type="hidden" name="send_embral" value="1">
-                                                            <button type="submit" class="text-blue-600 hover:text-blue-800"
-                                                                title="Enviar dados para Embral (Alterar status para Embral e abrir Ficha/WhatsApp)">
-                                                                <svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                                                    viewBox="0 0 24 24">
-                                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                                        stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
+                                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
                                                                     </path>
                                                                 </svg>
                                                             </button>
                                                         </form>
                                                     <?php endif; ?>
-
-                                                    <form method="POST" onsubmit="confirmDelete(event)" class="inline">
-                                                        <input type="hidden" name="client_id"
-                                                            value="<?php echo $client['id']; ?>">
-                                                        <input type="hidden" name="delete_client" value="1">
-                                                        <button type="submit" class="text-red-500 hover:text-red-700"
-                                                            title="Excluir">
-                                                            <svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                                                viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round"
-                                                                    stroke-width="2"
-                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
-                                                                </path>
-                                                            </svg>
-                                                        </button>
-                                                    </form>
                                                 </div>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="7"
-                                            class="px-5 py-5 border-b border-gray-200 bg-white text-sm text-center text-gray-500">
+                                        <td colspan="7" class="px-5 py-5 border-b border-gray-200 bg-white text-sm text-center">
                                             Nenhum cliente encontrado.
                                         </td>
                                     </tr>
@@ -556,6 +629,7 @@ $statusFilterParam = $_GET['status'] ?? '';
         let currentOrder = '<?php echo htmlspecialchars($order); ?>';
 
         const STORAGE_KEY_STATUS = 'crm_clients_filter_status';
+        const STORAGE_KEY_SCOPE = 'crm_clients_filter_scope';
         const STORAGE_KEY_SEARCH = 'crm_clients_filter_search';
         const STORAGE_KEY_PER_PAGE = 'crm_clients_filter_per_page';
 
@@ -670,13 +744,20 @@ $statusFilterParam = $_GET['status'] ?? '';
         function getMatchingRows() {
             const searchInput = document.getElementById('searchInput');
             const statusFilter = document.getElementById('statusFilter');
+            const scopeFilter = document.getElementById('scopeFilter');
 
             const searchRaw = searchInput ? searchInput.value.trim() : '';
             const searchNorm = normalizeText(searchRaw);
             const selectedStatus = statusFilter ? statusFilter.value.toLowerCase().trim() : '';
+            const selectedScope = scopeFilter ? scopeFilter.value : 'all';
             const rows = Array.from(document.querySelectorAll('.client-row'));
 
             return rows.filter(row => {
+                // Scope match logic (mine vs all)
+                if (selectedScope === 'mine' && row.getAttribute('data-is-mine') !== '1') {
+                    return false;
+                }
+
                 const name = normalizeText(row.querySelector('.client-name') ? row.querySelector('.client-name').textContent : '');
                 const farm = normalizeText(row.querySelector('.client-farm') ? row.querySelector('.client-farm').textContent : '');
                 const date = normalizeText(row.querySelector('.client-date') ? row.querySelector('.client-date').textContent : '');
@@ -867,12 +948,15 @@ $statusFilterParam = $_GET['status'] ?? '';
 
         function syncFilterStorageAndUrl() {
             const statusSelect = document.getElementById('statusFilter');
+            const scopeSelect = document.getElementById('scopeFilter');
             const searchInput = document.getElementById('searchInput');
 
             const statusVal = statusSelect ? statusSelect.value : '';
+            const scopeVal = scopeSelect ? scopeSelect.value : 'all';
             const searchVal = searchInput ? searchInput.value.trim() : '';
 
             sessionStorage.setItem(STORAGE_KEY_STATUS, statusVal);
+            sessionStorage.setItem(STORAGE_KEY_SCOPE, scopeVal);
             sessionStorage.setItem(STORAGE_KEY_SEARCH, searchVal);
 
             const url = new URL(window.location);
@@ -880,6 +964,12 @@ $statusFilterParam = $_GET['status'] ?? '';
                 url.searchParams.set('status', statusVal);
             } else {
                 url.searchParams.delete('status');
+            }
+
+            if (scopeVal && scopeVal !== 'all') {
+                url.searchParams.set('scope', scopeVal);
+            } else {
+                url.searchParams.delete('scope');
             }
 
             if (searchVal) {
@@ -900,6 +990,7 @@ $statusFilterParam = $_GET['status'] ?? '';
         function initFilters() {
             const urlParams = new URLSearchParams(window.location.search);
             const statusSelect = document.getElementById('statusFilter');
+            const scopeSelect = document.getElementById('scopeFilter');
             const searchInput = document.getElementById('searchInput');
             const perPageSelect = document.getElementById('perPageSelect');
 
@@ -915,7 +1006,19 @@ $statusFilterParam = $_GET['status'] ?? '';
                 }
             }
 
-            // 2. Search Text:
+            // 2. Scope Filter:
+            if (urlParams.has('scope')) {
+                const sc = urlParams.get('scope');
+                if (scopeSelect) scopeSelect.value = sc;
+                sessionStorage.setItem(STORAGE_KEY_SCOPE, sc);
+            } else {
+                const savedScope = sessionStorage.getItem(STORAGE_KEY_SCOPE);
+                if (savedScope !== null && scopeSelect) {
+                    scopeSelect.value = savedScope;
+                }
+            }
+
+            // 3. Search Text:
             if (urlParams.has('q')) {
                 const q = urlParams.get('q');
                 if (searchInput) searchInput.value = q;
@@ -927,7 +1030,7 @@ $statusFilterParam = $_GET['status'] ?? '';
                 }
             }
 
-            // 3. Per Page:
+            // 4. Per Page:
             const savedPerPage = sessionStorage.getItem(STORAGE_KEY_PER_PAGE);
             if (savedPerPage !== null && perPageSelect) {
                 perPageSelect.value = savedPerPage;
@@ -951,9 +1054,10 @@ $statusFilterParam = $_GET['status'] ?? '';
             });
         });
 
-        document.getElementById('searchInput').addEventListener('input', onFiltersChanged);
-        document.getElementById('statusFilter').addEventListener('change', onFiltersChanged);
-        document.getElementById('perPageSelect').addEventListener('change', function () {
+        document.getElementById('searchInput')?.addEventListener('input', onFiltersChanged);
+        document.getElementById('statusFilter')?.addEventListener('change', onFiltersChanged);
+        document.getElementById('scopeFilter')?.addEventListener('change', onFiltersChanged);
+        document.getElementById('perPageSelect')?.addEventListener('change', function () {
             perPage = this.value;
             sessionStorage.setItem(STORAGE_KEY_PER_PAGE, perPage);
             currentPage = 1;

@@ -19,29 +19,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = $stmt->fetch();
 
     if ($user && password_verify($password, $user['password'])) {
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['user_name'] = $user['name'];
+        if (isset($user['is_active']) && (int)$user['is_active'] === 0) {
+            $error = "Seu usuário está desativado. Entre em contato com o administrador.";
+        } else {
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_name'] = $user['name'];
+            $_SESSION['user_role'] = $user['role'] ?? 'operator';
+            $_SESSION['user_whatsapp'] = $user['whatsapp'] ?? '';
 
-        // If remember me is active (or default), generate secure persistent token (30 days)
-        if ($remember) {
-            $rawToken = bin2hex(random_bytes(32));
-            $tokenHash = hash('sha256', $rawToken);
+            // If remember me is active (or default), generate secure persistent token (30 days)
+            if ($remember) {
+                $rawToken = bin2hex(random_bytes(32));
+                $tokenHash = hash('sha256', $rawToken);
 
-            $updateStmt = $pdo->prepare("UPDATE " . TABLE_NAME . "users SET remember_token = ? WHERE id = ?");
-            $updateStmt->execute([$tokenHash, $user['id']]);
+                $updateStmt = $pdo->prepare("UPDATE " . TABLE_NAME . "users SET remember_token = ? WHERE id = ?");
+                $updateStmt->execute([$tokenHash, $user['id']]);
 
-            $cookieExpire = time() + (86400 * 30); // 30 days
-            setcookie('remember_token', $user['id'] . ':' . $rawToken, [
-                'expires' => $cookieExpire,
-                'path' => '/',
-                'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
-                'httponly' => true,
-                'samesite' => 'Lax'
-            ]);
+                $cookieExpire = time() + (86400 * 30); // 30 days
+                setcookie('remember_token', $user['id'] . ':' . $rawToken, [
+                    'expires' => $cookieExpire,
+                    'path' => '/',
+                    'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
+                    'httponly' => true,
+                    'samesite' => 'Lax'
+                ]);
+            }
+
+            header("Location: admin/index.php");
+            exit;
         }
-
-        header("Location: admin/index.php");
-        exit;
     } else {
         $error = "E-mail ou senha inválidos.";
     }
