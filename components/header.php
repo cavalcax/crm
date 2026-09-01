@@ -226,7 +226,7 @@
     }
 
     // Subscribe to Web Push
-    async function syncPushSubscription(reg) {
+    async function syncPushSubscription(reg, force = false) {
         try {
             if (!reg) {
                 reg = await navigator.serviceWorker.ready;
@@ -248,12 +248,21 @@
 
             if (sub) {
                 const rawSub = sub.toJSON ? sub.toJSON() : {};
+                const p256dh = rawSub.keys ? rawSub.keys.p256dh : '';
+                const auth = rawSub.keys ? rawSub.keys.auth : '';
+                const cacheKey = 'crm_push_synced_' + btoa(sub.endpoint).slice(0, 32);
+
+                // Se já sincronizado no servidor e não é um envio forçado, evita requisição repetida
+                if (!force && localStorage.getItem(cacheKey) === 'synced') {
+                    return { success: true, cached: true };
+                }
+
                 const payload = {
                     action: 'subscribe_push',
                     endpoint: sub.endpoint,
                     keys: {
-                        p256dh: rawSub.keys ? rawSub.keys.p256dh : '',
-                        auth: rawSub.keys ? rawSub.keys.auth : ''
+                        p256dh: p256dh,
+                        auth: auth
                     }
                 };
 
@@ -275,6 +284,9 @@
                     body: JSON.stringify(payload)
                 });
                 const postJson = await postRes.json();
+                if (postJson && postJson.success) {
+                    localStorage.setItem(cacheKey, 'synced');
+                }
                 return postJson;
             }
         } catch (e) {
@@ -293,6 +305,8 @@
                 const reg = await navigator.serviceWorker.ready;
                 const sub = await reg.pushManager.getSubscription();
                 if (sub) {
+                    const cacheKey = 'crm_push_synced_' + btoa(sub.endpoint).slice(0, 32);
+                    localStorage.removeItem(cacheKey);
                     await fetch('api-notifications.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

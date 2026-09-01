@@ -52,10 +52,25 @@ switch ($action) {
         $endpointHash = hash('sha256', $endpoint);
 
         try {
+            // 1. Verifica se a inscrição para este usuário e endpoint já existe
+            $checkStmt = $pdo->prepare("SELECT id, p256dh, auth FROM " . TABLE_NAME . "push_subscriptions WHERE user_id = ? AND endpoint_hash = ? LIMIT 1");
+            $checkStmt->execute([$user_id, $endpointHash]);
+            $existing = $checkStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($existing) {
+                // Atualiza somente se as chaves criptográficas mudaram
+                if ($existing['p256dh'] !== $p256dh || $existing['auth'] !== $auth) {
+                    $updateStmt = $pdo->prepare("UPDATE " . TABLE_NAME . "push_subscriptions SET p256dh = ?, auth = ?, updated_at = NOW() WHERE id = ?");
+                    $updateStmt->execute([$p256dh, $auth, $existing['id']]);
+                }
+                echo json_encode(['success' => true, 'message' => 'Dispositivo já inscrito e atualizado.'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            // 2. Se não existir, faz a inserção nova
             $stmt = $pdo->prepare("
                 INSERT INTO " . TABLE_NAME . "push_subscriptions (user_id, endpoint, endpoint_hash, p256dh, auth)
                 VALUES (?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE p256dh = VALUES(p256dh), auth = VALUES(auth), updated_at = NOW()
             ");
             $stmt->execute([$user_id, $endpoint, $endpointHash, $p256dh, $auth]);
 

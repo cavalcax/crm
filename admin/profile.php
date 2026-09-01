@@ -325,7 +325,7 @@ $isNotifEnabled = !isset($user['notifications_enabled']) || (int)$user['notifica
                                 const reg = await navigator.serviceWorker.register(swUrl);
                                 await navigator.serviceWorker.ready;
                                 if (typeof syncPushSubscription === 'function') {
-                                    await syncPushSubscription(reg);
+                                    await syncPushSubscription(reg, true);
                                 }
                             }
                         } catch (err) {
@@ -356,7 +356,7 @@ $isNotifEnabled = !isset($user['notifications_enabled']) || (int)$user['notifica
                                 const swUrl = typeof getSwUrl === 'function' ? getSwUrl() : '../service-worker.js';
                                 const reg = await navigator.serviceWorker.register(swUrl);
                                 await navigator.serviceWorker.ready;
-                                await syncPushSubscription(reg);
+                                await syncPushSubscription(reg, true);
                             }
                         } catch (err) {
                             console.warn('Sync push on form submit:', err);
