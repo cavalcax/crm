@@ -322,9 +322,9 @@ $breedsList = parseBreedsList($client['breed_interests'] ?? '');
                     <p class="font-semibold text-gray-900 text-xs mt-1"><?php echo htmlspecialchars($client['animal_count_range'] ?: '-'); ?></p>
                 </div>
 
-                <!-- Produção Diária de Leite -->
+                <!-- Produção Mensal de Leite -->
                 <div class="border border-gray-200 p-3 rounded-lg bg-gray-50 info-card">
-                    <p class="text-[11px] font-bold text-amber-800 uppercase">Produção Diária de Leite</p>
+                    <p class="text-[11px] font-bold text-amber-800 uppercase">Produção Mensal de Leite</p>
                     <p class="font-semibold text-gray-900 text-xs mt-1"><?php echo htmlspecialchars($client['milk_production_range'] ?: '-'); ?></p>
                 </div>
             </div>

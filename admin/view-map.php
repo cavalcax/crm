@@ -1081,7 +1081,7 @@ $auctionsJson = json_encode($validAuctions);
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.animal_count_range || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">9. Produção Diária</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">9. Produção Mensal Leite</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.milk_production_range || '-'}</p>
                             </div>
                         </div>

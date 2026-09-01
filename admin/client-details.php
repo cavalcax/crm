@@ -727,8 +727,7 @@ $clientSchedules = $stmt->fetchAll();
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Produção Diária de
-                                Leite</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Produção Mensal de Leite</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
                                 <?php echo htmlspecialchars($client['milk_production_range'] ?: '-'); ?>
                             </p>

@@ -83,8 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Por favor, responda se você já é produtor de leite.";
     } elseif (empty($animal_count_range)) {
         $error = "Por favor, selecione a quantidade de animais que possui atualmente.";
-    } elseif (empty($milk_production_range)) {
-        $error = "Por favor, selecione a sua produção de leite diária atual.";
+    } elseif (empty($milk_production_range) || $milk_production_range === '0.000' || (int)preg_replace('/\D/', '', $milk_production_range) === 0) {
+        $error = "Por favor, informe quantos litros de leite você entrega por mês atualmente.";
     } elseif (empty($name)) {
         $error = "Por favor, informe seu nome completo.";
     } elseif (empty($phone)) {
@@ -97,6 +97,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Já existe um cadastro com este número de telefone em nosso sistema. Se você já se cadastrou ou precisa atualizar seus dados, entre em contato conosco.";
     } else {
         try {
+            $formattedMilkProd = (strpos($milk_production_range, 'litro') === false) 
+                ? $milk_production_range . ' litros/mês' 
+                : $milk_production_range;
+
             $stmt = $pdo->prepare("
                 INSERT INTO " . TABLE_NAME . "clients (
                     user_id, status, is_potential, name, farm_name, phone, email, city, uf, address,
@@ -121,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $is_milk_producer,
                 $acquisition_reason,
                 $animal_count_range,
-                $milk_production_range,
+                $formattedMilkProd,
                 $latitude,
                 $longitude
             ]);
@@ -371,27 +375,20 @@ $states = getBrazilianStates();
                         </div>
                     </div>
 
-                    <!-- Produção de leite diária atualmente -->
+                    <!-- Quantos litros de leite você entrega por mês atualmente? -->
                     <div class="bg-brand-50 p-5 rounded-xl border border-brand-100">
-                        <label class="block text-brand-900 font-bold mb-3 text-base">
-                            Qual é a sua produção de leite diária atualmente?
+                        <label for="milkProductionInput" class="block text-brand-900 font-bold mb-1 text-base">
+                            Quantos litros de leite você entrega por mês atualmente?
                         </label>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <?php foreach ([
-                                '0 a 1.000 litros/dia',
-                                '1.000 a 2.000 litros/dia',
-                                '2.000 a 5.000 litros/dia',
-                                '5.000 a 10.000 litros/dia',
-                                '10.000 a 15.000 litros/dia',
-                                'Acima de 15.000 litros/dia'
-                            ] as $opt): ?>
-                                <label
-                                    class="flex items-center p-3 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-brand-500 transition">
-                                    <input type="radio" name="milk_production_range" value="<?php echo $opt; ?>" required
-                                        class="h-4 w-4 text-brand-500 focus:ring-brand-500 border-gray-300">
-                                    <span class="ml-3 text-sm text-gray-700 font-medium"><?php echo $opt; ?></span>
-                                </label>
-                            <?php endforeach; ?>
+                        <p class="text-xs text-gray-500 mb-3">Digite a quantidade mensal aproximada de litros de leite entregues.</p>
+                        <div class="relative max-w-xs">
+                            <input type="text" inputmode="numeric" name="milk_production_range" id="milkProductionInput"
+                                value="<?php echo htmlspecialchars(!empty($milk_production_range) ? $milk_production_range : '0.000'); ?>"
+                                required
+                                class="w-full pl-4 pr-24 py-3 border border-gray-300 rounded-lg text-lg font-bold text-gray-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white">
+                            <span class="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-xs font-bold text-gray-400 uppercase">
+                                Litros/Mês
+                            </span>
                         </div>
                     </div>
 
@@ -610,6 +607,47 @@ $states = getBrazilianStates();
             }
         }
 
+        // Milk Production (Thousand Mask: 0.000 -> 0.005 -> 0.050 -> 0.500 -> 5.000 -> 50.000)
+        const milkInput = document.getElementById('milkProductionInput');
+
+        function formatMilkLiters(value) {
+            let clean = (value || '').toString().replace(/\D/g, '');
+            clean = clean.replace(/^0+/, '');
+            if (!clean) {
+                return '0.000';
+            }
+            const padded = clean.padStart(4, '0');
+            const mainPart = padded.slice(0, -3);
+            const decimalPart = padded.slice(-3);
+            const formattedMain = parseInt(mainPart, 10).toLocaleString('pt-BR');
+            return `${formattedMain}.${decimalPart}`;
+        }
+
+        if (milkInput) {
+            if (milkInput.value) {
+                milkInput.value = formatMilkLiters(milkInput.value);
+            }
+
+            milkInput.addEventListener('input', function () {
+                this.value = formatMilkLiters(this.value);
+            });
+
+            milkInput.addEventListener('focus', function () {
+                if (!this.value || this.value === '0.000') {
+                    this.value = '0.000';
+                }
+                setTimeout(() => this.select(), 50);
+            });
+
+            milkInput.addEventListener('blur', function () {
+                if (!this.value) {
+                    this.value = '0.000';
+                } else {
+                    this.value = formatMilkLiters(this.value);
+                }
+            });
+        }
+
         if (phoneInput) {
             phoneInput.addEventListener('input', function (e) {
                 let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
@@ -672,6 +710,17 @@ $states = getBrazilianStates();
                         e.preventDefault();
                         alert('Por favor, especifique o sistema da sua produção no campo Outro.');
                         if (prodSystemOtherInput) prodSystemOtherInput.focus();
+                        return false;
+                    }
+                }
+
+                // Validate Milk production liters
+                if (milkInput) {
+                    const rawMilk = milkInput.value.replace(/\D/g, '');
+                    if (!rawMilk || parseInt(rawMilk, 10) === 0) {
+                        e.preventDefault();
+                        alert('Por favor, informe quantos litros de leite você entrega por mês atualmente.');
+                        milkInput.focus();
                         return false;
                     }
                 }

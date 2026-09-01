@@ -61,7 +61,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $is_milk_producer = sanitize($_POST['is_milk_producer'] ?? '');
     $acquisition_reason = sanitize($_POST['acquisition_reason'] ?? '');
     $animal_count_range = sanitize($_POST['animal_count_range'] ?? '');
-    $milk_production_range = sanitize($_POST['milk_production_range'] ?? '');
+    $rawMilkProd = sanitize($_POST['milk_production_range'] ?? '');
+    if (!empty($rawMilkProd) && $rawMilkProd !== '0.000' && (int)preg_replace('/\D/', '', $rawMilkProd) > 0) {
+        $milk_production_range = (strpos($rawMilkProd, 'litro') === false) ? $rawMilkProd . ' litros/mês' : $rawMilkProd;
+    } else {
+        $milk_production_range = '';
+    }
 
     if (empty($name)) {
         $error = "Por favor, informe o nome do cliente.";
@@ -334,22 +339,18 @@ $current_categories = !empty($client['animal_categories']) ? array_map('trim', e
                             </div>
 
                             <div>
-                                <label class="block text-gray-700 text-sm font-bold mb-2">Produção Diária de
-                                    Leite</label>
-                                <select name="milk_production_range"
-                                    class="shadow-sm border border-gray-300 rounded w-full py-3 px-4 text-gray-700 bg-white focus:ring-2 focus:ring-brand-500">
-                                    <option value="">Selecione...</option>
-                                    <?php foreach ([
-                                        '0 a 1.000 litros/dia',
-                                        '1.000 a 2.000 litros/dia',
-                                        '2.000 a 5.000 litros/dia',
-                                        '5.000 a 10.000 litros/dia',
-                                        '10.000 a 15.000 litros/dia',
-                                        'Acima de 15.000 litros/dia'
-                                    ] as $opt): ?>
-                                        <option value="<?php echo $opt; ?>" <?php echo ($client['milk_production_range'] ?? '') === $opt ? 'selected' : ''; ?>><?php echo $opt; ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <label for="milkProductionInput" class="block text-gray-700 text-sm font-bold mb-2">
+                                    Quantos litros de leite você entrega por mês atualmente?
+                                </label>
+                                <div class="relative">
+                                    <input type="text" inputmode="numeric" name="milk_production_range" id="milkProductionInput"
+                                        value="<?php echo htmlspecialchars(!empty($client['milk_production_range']) ? $client['milk_production_range'] : '0.000'); ?>"
+                                        placeholder="0.000"
+                                        class="shadow-sm appearance-none border border-gray-300 rounded w-full py-3 pl-4 pr-24 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-brand-500 font-bold bg-white">
+                                    <span class="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-xs font-bold text-gray-400 uppercase">
+                                        Litros/Mês
+                                    </span>
+                                </div>
                             </div>
 
                             <div>
@@ -528,6 +529,47 @@ $current_categories = !empty($client['animal_categories']) ? array_map('trim', e
 
         // Expose initMap to global scope
         window.initMap = initMap;
+
+        // Milk Production Thousand Mask
+        const milkInput = document.getElementById('milkProductionInput');
+
+        function formatMilkLiters(value) {
+            let clean = (value || '').toString().replace(/\D/g, '');
+            clean = clean.replace(/^0+/, '');
+            if (!clean) {
+                return '0.000';
+            }
+            const padded = clean.padStart(4, '0');
+            const mainPart = padded.slice(0, -3);
+            const decimalPart = padded.slice(-3);
+            const formattedMain = parseInt(mainPart, 10).toLocaleString('pt-BR');
+            return `${formattedMain}.${decimalPart}`;
+        }
+
+        if (milkInput) {
+            if (milkInput.value) {
+                milkInput.value = formatMilkLiters(milkInput.value);
+            }
+
+            milkInput.addEventListener('input', function () {
+                this.value = formatMilkLiters(this.value);
+            });
+
+            milkInput.addEventListener('focus', function () {
+                if (!this.value || this.value === '0.000') {
+                    this.value = '0.000';
+                }
+                setTimeout(() => this.select(), 50);
+            });
+
+            milkInput.addEventListener('blur', function () {
+                if (!this.value) {
+                    this.value = '0.000';
+                } else {
+                    this.value = formatMilkLiters(this.value);
+                }
+            });
+        }
 
         // Phone Mask & Duplicate Check
         document.querySelector('input[name="phone"]').addEventListener('input', function (e) {

@@ -225,7 +225,7 @@ function buildClientApprovalWelcomeMessage($client)
     }
     $msg .= "*Produtor de Leite:* {$isMilkProducer}\n";
     $msg .= "*Quantidade de Animais:* {$animalCount}\n";
-    $msg .= "*Produção Diária de Leite:* {$milkProd}\n\n";
+    $msg .= "*Produção Mensal de Leite:* {$milkProd}\n\n";
 
     $msg .= "Já estamos selecionando as melhores oportunidades e lotes alinhados ao seu perfil. Em breve entraremos em contato com novidades exclusivas!\n\n";
     $msg .= "Qualquer dúvida ou necessidade, estou à total disposição por aqui!";
@@ -283,7 +283,7 @@ function buildClientEmbralWhatsAppMessage($client, $intentions = [])
     }
     $msg .= "*Produtor de Leite:* {$isMilkProducer}\n";
     $msg .= "*Quantidade de Animais:* {$animalCount}\n";
-    $msg .= "*Produção Diária de Leite:* {$milkProd}\n";
+    $msg .= "*Produção Mensal de Leite:* {$milkProd}\n";
 
     $activeIntentions = array_filter($intentions, function($i) {
         return empty($i['status']) || $i['status'] === 'active';
