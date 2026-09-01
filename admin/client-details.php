@@ -54,6 +54,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_potential'])) 
     exit;
 }
 
+// Handle Add Interaction
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_interaction'])) {
+    $interaction_date = sanitize($_POST['interaction_date'] ?? date('Y-m-d'));
+    $title = sanitize($_POST['title'] ?? '');
+    $description = sanitize($_POST['description'] ?? '');
+
+    if (!empty($title) && !empty($description)) {
+        $stmt = $pdo->prepare("INSERT INTO " . TABLE_NAME . "interactions (client_id, user_id, interaction_date, title, description) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute([$client_id, $user_id, $interaction_date, $title, $description]);
+    }
+    header("Location: client-details.php?id=" . $client_id);
+    exit;
+}
+
+// Handle Delete Interaction
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_interaction'])) {
+    $interaction_id = intval($_POST['interaction_id']);
+    $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "interactions WHERE id = ? AND client_id = ? AND user_id = ?");
+    $stmt->execute([$interaction_id, $client_id, $user_id]);
+    header("Location: client-details.php?id=" . $client_id);
+    exit;
+}
+
 // Handle Add Intention
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_intention'])) {
     $type = $_POST['type']; // 'buy' or 'sell'
@@ -75,6 +98,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_intention'])) 
     header("Location: client-details.php?id=" . $client_id);
     exit;
 }
+
+// Fetch Interactions
+$stmt = $pdo->prepare("SELECT * FROM " . TABLE_NAME . "interactions WHERE client_id = ? AND user_id = ? ORDER BY interaction_date DESC, created_at DESC");
+$stmt->execute([$client_id, $user_id]);
+$interactions = $stmt->fetchAll();
 
 // Fetch Intentions
 $stmt = $pdo->prepare("SELECT i.*, cat.name as category_name FROM " . TABLE_NAME . "intentions i LEFT JOIN " . TABLE_NAME . "categories cat ON i.category_id = cat.id WHERE i.client_id = ? ORDER BY i.created_at DESC");
@@ -143,8 +171,7 @@ $clientSchedules = $stmt->fetchAll();
                     </a>
 
                     <!-- Client Header Info -->
-                    <div
-                        class="bg-white rounded-xl shadow-md p-6 relative overflow-hidden border border-gray-100 mb-6">
+                    <div class="bg-white rounded-xl shadow-md p-6 relative overflow-hidden border border-gray-100 mb-6">
                         <div class="absolute top-0 left-0 w-2 h-full bg-brand-500"></div>
 
                         <div class="flex flex-col xl:flex-row justify-between xl:items-center gap-6 z-10">
@@ -205,11 +232,13 @@ $clientSchedules = $stmt->fetchAll();
 
                                     <?php if (!empty($client['farm_name'])): ?>
                                         <p class="text-sm font-semibold text-brand-800 flex items-center mt-1">
-                                            <span class="mr-1.5">🏡</span> Fazenda: <?php echo htmlspecialchars($client['farm_name']); ?>
+                                            <span class="mr-1.5">🏡</span> Fazenda:
+                                            <?php echo htmlspecialchars($client['farm_name']); ?>
                                         </p>
                                     <?php endif; ?>
 
-                                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-gray-600 mt-2">
+                                    <div
+                                        class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-gray-600 mt-2">
                                         <?php if (!empty($client['phone'])): ?>
                                             <a href="https://wa.me/+55<?php echo preg_replace('/[^0-9]/', '', $client['phone']); ?>"
                                                 target="_blank"
@@ -227,7 +256,8 @@ $clientSchedules = $stmt->fetchAll();
                                             <a href="mailto:<?php echo htmlspecialchars($client['email']); ?>"
                                                 class="flex items-center text-blue-600 hover:text-blue-800 font-medium hover:underline"
                                                 title="Enviar e-mail para <?php echo htmlspecialchars($client['email']); ?>">
-                                                <svg class="w-4 h-4 mr-1 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg class="w-4 h-4 mr-1 text-blue-500 flex-shrink-0" fill="none"
+                                                    stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                         d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
                                                     </path>
@@ -252,7 +282,8 @@ $clientSchedules = $stmt->fetchAll();
                                             <a href="<?php echo $clientMapUrl; ?>" target="_blank"
                                                 class="flex items-center text-brand-700 hover:text-brand-900 font-medium hover:underline group"
                                                 title="Abrir localização no Google Maps">
-                                                <svg class="w-4 h-4 mr-1 text-brand-500 group-hover:text-brand-700 flex-shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg class="w-4 h-4 mr-1 text-brand-500 group-hover:text-brand-700 flex-shrink-0 transition"
+                                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                         d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z">
                                                     </path>
@@ -263,14 +294,16 @@ $clientSchedules = $stmt->fetchAll();
                                             </a>
                                         <?php else: ?>
                                             <span class="flex items-center text-gray-600">
-                                                <svg class="w-4 h-4 mr-1 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg class="w-4 h-4 mr-1 text-gray-400 flex-shrink-0" fill="none"
+                                                    stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                         d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z">
                                                     </path>
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                         d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                                 </svg>
-                                                <span class="font-medium text-brand-700"><?php echo htmlspecialchars($locStr); ?></span>
+                                                <span
+                                                    class="font-medium text-brand-700"><?php echo htmlspecialchars($locStr); ?></span>
                                             </span>
                                         <?php endif; ?>
                                     </div>
@@ -286,12 +319,14 @@ $clientSchedules = $stmt->fetchAll();
                                     $detailApprovalMsg = buildClientApprovalWelcomeMessage($client);
                                     $detailWaApprovalUrl = !empty($detailPhoneClean) ? "https://wa.me/+55" . $detailPhoneClean . "?text=" . rawurlencode($detailApprovalMsg) : '';
                                     ?>
-                                    <form method="POST" class="inline" onsubmit="if('<?php echo addslashes($detailWaApprovalUrl); ?>'){ window.open('<?php echo addslashes($detailWaApprovalUrl); ?>', '_blank'); }">
+                                    <form method="POST" class="inline"
+                                        onsubmit="if('<?php echo addslashes($detailWaApprovalUrl); ?>'){ window.open('<?php echo addslashes($detailWaApprovalUrl); ?>', '_blank'); }">
                                         <input type="hidden" name="attend_client" value="1">
                                         <button type="submit"
                                             class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5 cursor-pointer"
                                             title="Marcar como Atendido (Alterar para Atendido e abrir WhatsApp)">
-                                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor"
+                                                viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                             </svg>
@@ -302,12 +337,14 @@ $clientSchedules = $stmt->fetchAll();
 
                                 <!-- Enviar para Embral (quando status for Atendido) -->
                                 <?php if (($client['status'] ?? '') === 'Atendido'): ?>
-                                    <form method="POST" class="inline" onsubmit="window.open('client-pdf.php?id=<?php echo $client['id']; ?>&sent=embral', '_blank');">
+                                    <form method="POST" class="inline"
+                                        onsubmit="window.open('client-pdf.php?id=<?php echo $client['id']; ?>&sent=embral', '_blank');">
                                         <input type="hidden" name="send_embral" value="1">
                                         <button type="submit"
                                             class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5 cursor-pointer"
                                             title="Enviar dados para Embral (Alterar status para Embral e abrir Ficha/WhatsApp)">
-                                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor"
+                                                viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
                                             </svg>
@@ -343,18 +380,6 @@ $clientSchedules = $stmt->fetchAll();
                                         E-mail
                                     </a>
                                 <?php endif; ?>
-
-                                <!-- Agendar Compromisso -->
-                                <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>"
-                                    class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5"
-                                    title="Agendar Compromisso com este Cliente">
-                                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
-                                        </path>
-                                    </svg>
-                                    Agendar
-                                </a>
 
                                 <!-- PDF -->
                                 <a href="client-pdf.php?id=<?php echo $client['id']; ?>" target="_blank"
@@ -410,12 +435,13 @@ $clientSchedules = $stmt->fetchAll();
                                     </path>
                                 </svg>
                             </span>
-                            Agenda / Compromissos (<?php echo count($clientSchedules); ?>)
+                            Agendas (<?php echo count($clientSchedules); ?>)
                         </h3>
                         <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>"
                             class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs hover:-translate-y-0.5">
                             <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4v16m8-8H4"></path>
                             </svg>
                             Agendar Novo
                         </a>
@@ -423,50 +449,61 @@ $clientSchedules = $stmt->fetchAll();
 
                     <?php if (count($clientSchedules) > 0): ?>
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            <?php foreach ($clientSchedules as $cs): 
+                            <?php foreach ($clientSchedules as $cs):
                                 $csDate = new DateTime($cs['start_time']);
                                 $csTypeLabels = ['meeting' => 'Reunião', 'visit' => 'Visita', 'auction' => 'Leilão', 'other' => 'Outro'];
-                                $csTypeClass = match($cs['type']) {
+                                $csTypeClass = match ($cs['type']) {
                                     'meeting' => 'bg-blue-100 text-blue-800 border-blue-300',
                                     'visit' => 'bg-emerald-100 text-emerald-800 border-emerald-300',
                                     'auction' => 'bg-amber-100 text-amber-800 border-amber-300',
                                     default => 'bg-purple-100 text-purple-800 border-purple-300'
                                 };
-                            ?>
+                                ?>
                                 <div class="bg-brand-50 p-4 rounded-xl border border-brand-100 hover:shadow-md transition">
                                     <div class="flex justify-between items-start mb-2">
-                                        <span class="text-xs font-bold px-2 py-0.5 rounded-full border <?php echo $csTypeClass; ?>">
+                                        <span
+                                            class="text-xs font-bold px-2 py-0.5 rounded-full border <?php echo $csTypeClass; ?>">
                                             <?php echo $csTypeLabels[$cs['type']] ?? 'Outro'; ?>
                                         </span>
-                                        <a href="schedule-edit.php?id=<?php echo $cs['id']; ?>" class="text-xs font-semibold text-brand-700 hover:text-brand-900 hover:underline">
+                                        <a href="schedule-edit.php?id=<?php echo $cs['id']; ?>"
+                                            class="text-xs font-semibold text-brand-700 hover:text-brand-900 hover:underline">
                                             Editar
                                         </a>
                                     </div>
-                                    <h4 class="font-bold text-gray-900 text-sm mb-1"><?php echo htmlspecialchars($cs['title']); ?></h4>
+                                    <h4 class="font-bold text-gray-900 text-sm mb-1">
+                                        <?php echo htmlspecialchars($cs['title']); ?>
+                                    </h4>
                                     <p class="text-xs text-gray-600 flex items-center mb-1">
-                                        <svg class="w-3.5 h-3.5 mr-1 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        <svg class="w-3.5 h-3.5 mr-1 text-brand-600 flex-shrink-0" fill="none"
+                                            stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                         </svg>
                                         <?php echo $csDate->format('d/m/Y \à\s H:i'); ?>
                                     </p>
                                     <?php if (!empty($cs['city']) || !empty($cs['uf'])): ?>
                                         <p class="text-xs text-gray-500 flex items-center mb-1">
-                                            <svg class="w-3.5 h-3.5 mr-1 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                            <svg class="w-3.5 h-3.5 mr-1 text-gray-400 flex-shrink-0" fill="none"
+                                                stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z">
+                                                </path>
                                             </svg>
                                             <?php echo htmlspecialchars(implode(' - ', array_filter([$cs['city'], $cs['uf']]))); ?>
                                         </p>
                                     <?php endif; ?>
                                     <?php if (!empty($cs['observation'])): ?>
-                                        <p class="text-xs text-gray-600 italic mt-2 line-clamp-2">"<?php echo htmlspecialchars($cs['observation']); ?>"</p>
+                                        <p class="text-xs text-gray-600 italic mt-2 line-clamp-2">
+                                            "<?php echo htmlspecialchars($cs['observation']); ?>"</p>
                                     <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                         </div>
                     <?php else: ?>
                         <p class="text-sm text-gray-500 italic bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            Nenhum compromisso agendado com este cliente ainda. 
-                            <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>" class="text-brand-700 font-bold hover:underline ml-1">Clique aqui para agendar</a>.
+                            Nenhum compromisso agendado com este cliente ainda.
+                            <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>"
+                                class="text-brand-700 font-bold hover:underline ml-1">Clique aqui para agendar</a>.
                         </p>
                     <?php endif; ?>
                 </div>
@@ -490,64 +527,158 @@ $clientSchedules = $stmt->fetchAll();
 
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Condição de Pagamento</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Condição de Pagamento
+                            </p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
-                                <?php echo htmlspecialchars($client['payment_condition'] ?: '-'); ?></p>
+                                <?php echo htmlspecialchars($client['payment_condition'] ?: '-'); ?>
+                            </p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Interesse em Adquirir</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Interesse em Adquirir
+                            </p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
-                                <?php echo htmlspecialchars($client['breed_interests'] ?: '-'); ?></p>
+                                <?php echo htmlspecialchars($client['breed_interests'] ?: '-'); ?>
+                            </p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
                             <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Motivo da Aquisição</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
-                                <?php echo htmlspecialchars($client['acquisition_reason'] ?: '-'); ?></p>
+                                <?php echo htmlspecialchars($client['acquisition_reason'] ?: '-'); ?>
+                            </p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Qtd. Animais Necessários</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Qtd. Animais
+                                Necessários</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
-                                <?php echo htmlspecialchars($client['purchase_animal_count'] ?? '-') ?: '-'; ?></p>
+                                <?php echo htmlspecialchars($client['purchase_animal_count'] ?? '-') ?: '-'; ?>
+                            </p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100 lg:col-span-2">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Categorias de Animais Desejadas</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Categorias de Animais
+                                Desejadas</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
-                                <?php echo htmlspecialchars($client['animal_categories'] ?? '-') ?: '-'; ?></p>
+                                <?php echo htmlspecialchars($client['animal_categories'] ?? '-') ?: '-'; ?>
+                            </p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
                             <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Sistema de Produção</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
-                                <?php echo htmlspecialchars($client['production_system'] ?? '-') ?: '-'; ?></p>
+                                <?php echo htmlspecialchars($client['production_system'] ?? '-') ?: '-'; ?>
+                            </p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
                             <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Produtor de Leite</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
-                                <?php echo htmlspecialchars($client['is_milk_producer'] ?: '-'); ?></p>
+                                <?php echo htmlspecialchars($client['is_milk_producer'] ?: '-'); ?>
+                            </p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Quantidade de Animais Possuídos</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Quantidade de Animais
+                                Possuídos</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
-                                <?php echo htmlspecialchars($client['animal_count_range'] ?: '-'); ?></p>
+                                <?php echo htmlspecialchars($client['animal_count_range'] ?: '-'); ?>
+                            </p>
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Produção Diária de Leite</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Produção Diária de
+                                Leite</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
-                                <?php echo htmlspecialchars($client['milk_production_range'] ?: '-'); ?></p>
+                                <?php echo htmlspecialchars($client['milk_production_range'] ?: '-'); ?>
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 3 Cards: Interações, Compra, Venda -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Client Interactions -->
+                    <div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-emerald-600 flex flex-col">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                            <span class="p-2 bg-emerald-100 rounded-full mr-2">
+                                <svg class="w-5 h-5 text-emerald-700" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                            </span>
+                            Interações
+                        </h3>
+
+                        <!-- Add Form (Top) -->
+                        <form method="POST" class="mb-5 pb-5 border-b border-gray-100">
+                            <input type="hidden" name="add_interaction" value="1">
+                            <div class="mb-2">
+                                <label class="block text-[11px] font-bold text-gray-600 mb-1">Data da Interação</label>
+                                <input type="date" name="interaction_date" value="<?php echo date('Y-m-d'); ?>"
+                                    class="w-full p-2 border rounded text-xs text-gray-700 bg-white" required>
+                            </div>
+                            <input type="text" name="title" placeholder="Título (ex: Alinhamento WhatsApp, Visita...)"
+                                class="w-full mb-2 p-2 border rounded text-xs" required>
+                            <textarea name="description" placeholder="Descrição da conversa ou ação..."
+                                class="w-full mb-2 p-2 border rounded text-xs" rows="2" required></textarea>
+                            <button type="submit"
+                                class="w-full bg-emerald-600 text-white font-bold py-2 rounded text-xs hover:bg-emerald-700 transition cursor-pointer">
+                                Adicionar Interação
+                            </button>
+                        </form>
+
+                        <!-- List (Bottom) -->
+                        <div class="flex-1">
+                            <h4 class="text-xs font-bold uppercase text-gray-400 tracking-wider mb-3">Histórico de
+                                Interações</h4>
+                            <ul class="space-y-3 max-h-80 overflow-y-auto pr-1">
+                                <?php if (!empty($interactions)): ?>
+                                    <?php foreach ($interactions as $inter):
+                                        $interDate = new DateTime($inter['interaction_date']);
+                                        ?>
+                                        <li class="bg-emerald-50 rounded-lg p-3 relative group border border-emerald-100">
+                                            <div class="flex items-center justify-between pr-6 mb-1">
+                                                <p class="font-bold text-emerald-950 text-sm">
+                                                    <?php echo htmlspecialchars($inter['title']); ?>
+                                                </p>
+                                                <span
+                                                    class="text-[11px] text-emerald-700 font-semibold bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                                                    <?php echo $interDate->format('d/m/Y'); ?>
+                                                </span>
+                                            </div>
+                                            <p class="text-xs text-gray-700 leading-relaxed whitespace-pre-line">
+                                                <?php echo htmlspecialchars($inter['description']); ?>
+                                            </p>
+
+                                            <form method="POST" class="absolute top-2 right-2 transition"
+                                                onsubmit="confirmDelete(event)">
+                                                <input type="hidden" name="interaction_id" value="<?php echo $inter['id']; ?>">
+                                                <input type="hidden" name="delete_interaction" value="1">
+                                                <button type="submit"
+                                                    class="text-red-400 hover:text-red-700 p-0.5 cursor-pointer"
+                                                    title="Excluir interação">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                                        </path>
+                                                    </svg>
+                                                </button>
+                                            </form>
+                                        </li>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <li class="text-xs text-gray-400 italic py-2 bg-gray-50 p-3 rounded">Nenhuma interação
+                                        registrada ainda.</li>
+                                <?php endif; ?>
+                            </ul>
+                        </div>
+                    </div>
+
                     <!-- Buy Intentions -->
-                    <div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-blue-500">
+                    <div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-blue-500 flex flex-col">
                         <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
                             <span class="p-2 bg-blue-100 rounded-full mr-2"><svg class="w-5 h-5 text-blue-600"
                                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -559,67 +690,77 @@ $clientSchedules = $stmt->fetchAll();
                             Intenção de COMPRA
                         </h3>
 
-                        <!-- List -->
-                        <ul class="space-y-3 mb-6">
-                            <?php foreach ($intentions as $intention): ?>
-                                <?php if ($intention['type'] === 'buy'): ?>
-                                    <li class="bg-blue-50 rounded p-3 relative group">
-                                        <p class="font-bold text-blue-900">
-                                            <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
-                                        </p>
-                                        <p class="text-sm text-gray-700">
-                                            <?php echo htmlspecialchars($intention['description']); ?>
-                                        </p>
-                                        <?php if ($intention['value'] > 0): ?>
-                                            <p class="text-sm font-semibold text-green-600 mt-1">R$
-                                                <?php echo number_format($intention['value'], 2, ',', '.'); ?>
-                                            </p>
-                                            <?php
-                                        endif; ?>
-
-                                        <form method="POST" class="absolute top-2 right-2 transition"
-                                            onsubmit="confirmDelete(event)">
-                                            <input type="hidden" name="intention_id" value="<?php echo $intention['id']; ?>">
-                                            <input type="hidden" name="delete_intention" value="1">
-                                            <button type="submit" class="text-red-400 hover:text-red-700">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
-                                                    </path>
-                                                </svg>
-                                            </button>
-                                        </form>
-                                    </li>
-                                    <?php
-                                endif; ?>
-                                <?php
-                            endforeach; ?>
-                        </ul>
-
-                        <!-- Add Form -->
-                        <form method="POST" class="mt-4 pt-4 border-t border-gray-100">
+                        <!-- Add Form (Top) -->
+                        <form method="POST" class="mb-5 pb-5 border-b border-gray-100">
                             <input type="hidden" name="type" value="buy">
-                            <select name="category_id" class="w-full mb-2 p-2 border rounded">
+                            <select name="category_id" class="w-full mb-2 p-2 border rounded text-xs bg-white">
                                 <option value="">Selecione Categoria...</option>
                                 <?php foreach ($categories as $cat): ?>
                                     <option value="<?php echo $cat['id']; ?>">
                                         <?php echo htmlspecialchars($cat['name']); ?>
                                     </option>
-                                    <?php
-                                endforeach; ?>
+                                <?php endforeach; ?>
                             </select>
-                            <textarea name="description" placeholder="Descrição (ex: procura terreno plano...)"
-                                class="w-full mb-2 p-2 border rounded" rows="2" required></textarea>
+                            <textarea name="description" placeholder="Descrição (ex: procura animais...)"
+                                class="w-full mb-2 p-2 border rounded text-xs" rows="2" required></textarea>
                             <input type="number" name="value" placeholder="Valor Estimado (opcional)"
-                                class="w-full mb-2 p-2 border rounded" step="0.01">
+                                class="w-full mb-2 p-2 border rounded text-xs" step="0.01">
                             <button type="submit" name="add_intention"
-                                class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition">Adicionar
-                                Compra</button>
+                                class="w-full bg-blue-600 text-white font-bold py-2 rounded text-xs hover:bg-blue-700 transition cursor-pointer">
+                                Adicionar Compra
+                            </button>
                         </form>
+
+                        <!-- List (Bottom) -->
+                        <div class="flex-1">
+                            <h4 class="text-xs font-bold uppercase text-gray-400 tracking-wider mb-3">Compras
+                                Cadastradas</h4>
+                            <ul class="space-y-3 max-h-80 overflow-y-auto pr-1">
+                                <?php $hasBuy = false; ?>
+                                <?php foreach ($intentions as $intention): ?>
+                                    <?php if ($intention['type'] === 'buy'):
+                                        $hasBuy = true; ?>
+                                        <li class="bg-blue-50 rounded-lg p-3 relative group border border-blue-100">
+                                            <p class="font-bold text-blue-900 text-sm">
+                                                <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
+                                            </p>
+                                            <p class="text-xs text-gray-700 mt-0.5">
+                                                <?php echo htmlspecialchars($intention['description']); ?>
+                                            </p>
+                                            <?php if ($intention['value'] > 0): ?>
+                                                <p class="text-xs font-semibold text-green-600 mt-1">R$
+                                                    <?php echo number_format($intention['value'], 2, ',', '.'); ?>
+                                                </p>
+                                            <?php endif; ?>
+
+                                            <form method="POST" class="absolute top-2 right-2 transition"
+                                                onsubmit="confirmDelete(event)">
+                                                <input type="hidden" name="intention_id"
+                                                    value="<?php echo $intention['id']; ?>">
+                                                <input type="hidden" name="delete_intention" value="1">
+                                                <button type="submit"
+                                                    class="text-red-400 hover:text-red-700 p-0.5 cursor-pointer"
+                                                    title="Excluir intenção">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                                        </path>
+                                                    </svg>
+                                                </button>
+                                            </form>
+                                        </li>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                                <?php if (!$hasBuy): ?>
+                                    <li class="text-xs text-gray-400 italic py-2 bg-gray-50 p-3 rounded">Nenhuma intenção de
+                                        compra registrada.</li>
+                                <?php endif; ?>
+                            </ul>
+                        </div>
                     </div>
 
                     <!-- Sell Intentions -->
-                    <div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-red-500">
+                    <div class="bg-white rounded-lg shadow-lg p-6 border-l-4 border-red-500 flex flex-col">
                         <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
                             <span class="p-2 bg-red-100 rounded-full mr-2"><svg class="w-5 h-5 text-red-600" fill="none"
                                     stroke="currentColor" viewBox="0 0 24 24">
@@ -629,66 +770,75 @@ $clientSchedules = $stmt->fetchAll();
                             Intenção de VENDA
                         </h3>
 
-                        <!-- List -->
-                        <ul class="space-y-3 mb-6">
-                            <?php foreach ($intentions as $intention): ?>
-                                <?php if ($intention['type'] === 'sell'): ?>
-                                    <li class="bg-red-50 rounded p-3 relative group">
-                                        <p class="font-bold text-red-900">
-                                            <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
-                                        </p>
-                                        <p class="text-sm text-gray-700">
-                                            <?php echo htmlspecialchars($intention['description']); ?>
-                                        </p>
-                                        <?php if ($intention['value'] > 0): ?>
-                                            <p class="text-sm font-semibold text-green-600 mt-1">R$
-                                                <?php echo number_format($intention['value'], 2, ',', '.'); ?>
-                                            </p>
-                                            <?php
-                                        endif; ?>
-
-                                        <form method="POST" class="absolute top-2 right-2 transition"
-                                            onsubmit="confirmDelete(event)">
-                                            <input type="hidden" name="intention_id" value="<?php echo $intention['id']; ?>">
-                                            <input type="hidden" name="delete_intention" value="1">
-                                            <button type="submit" class="text-red-400 hover:text-red-700">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
-                                                    </path>
-                                                </svg>
-                                            </button>
-                                        </form>
-                                    </li>
-                                    <?php
-                                endif; ?>
-                                <?php
-                            endforeach; ?>
-                        </ul>
-
-                        <!-- Add Form -->
-                        <form method="POST" class="mt-4 pt-4 border-t border-gray-100">
+                        <!-- Add Form (Top) -->
+                        <form method="POST" class="mb-5 pb-5 border-b border-gray-100">
                             <input type="hidden" name="type" value="sell">
-                            <select name="category_id" class="w-full mb-2 p-2 border rounded">
+                            <select name="category_id" class="w-full mb-2 p-2 border rounded text-xs bg-white">
                                 <option value="">Selecione Categoria...</option>
                                 <?php foreach ($categories as $cat): ?>
                                     <option value="<?php echo $cat['id']; ?>">
                                         <?php echo htmlspecialchars($cat['name']); ?>
                                     </option>
-                                    <?php
-                                endforeach; ?>
+                                <?php endforeach; ?>
                             </select>
-                            <textarea name="description" placeholder="Descrição (ex: vende casa reformada...)"
-                                class="w-full mb-2 p-2 border rounded" rows="2" required></textarea>
+                            <textarea name="description" placeholder="Descrição (ex: vende bezerras...)"
+                                class="w-full mb-2 p-2 border rounded text-xs" rows="2" required></textarea>
                             <input type="number" name="value" placeholder="Valor Estimado (opcional)"
-                                class="w-full mb-2 p-2 border rounded" step="0.01">
+                                class="w-full mb-2 p-2 border rounded text-xs" step="0.01">
                             <button type="submit" name="add_intention"
-                                class="w-full bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700 transition">Adicionar
-                                Venda</button>
+                                class="w-full bg-red-600 text-white font-bold py-2 rounded text-xs hover:bg-red-700 transition cursor-pointer">
+                                Adicionar Venda
+                            </button>
                         </form>
+
+                        <!-- List (Bottom) -->
+                        <div class="flex-1">
+                            <h4 class="text-xs font-bold uppercase text-gray-400 tracking-wider mb-3">Vendas Cadastradas
+                            </h4>
+                            <ul class="space-y-3 max-h-80 overflow-y-auto pr-1">
+                                <?php $hasSell = false; ?>
+                                <?php foreach ($intentions as $intention): ?>
+                                    <?php if ($intention['type'] === 'sell'):
+                                        $hasSell = true; ?>
+                                        <li class="bg-red-50 rounded-lg p-3 relative group border border-red-100">
+                                            <p class="font-bold text-red-900 text-sm">
+                                                <?php echo htmlspecialchars($intention['category_name'] ?? 'Geral'); ?>
+                                            </p>
+                                            <p class="text-xs text-gray-700 mt-0.5">
+                                                <?php echo htmlspecialchars($intention['description']); ?>
+                                            </p>
+                                            <?php if ($intention['value'] > 0): ?>
+                                                <p class="text-xs font-semibold text-green-600 mt-1">R$
+                                                    <?php echo number_format($intention['value'], 2, ',', '.'); ?>
+                                                </p>
+                                            <?php endif; ?>
+
+                                            <form method="POST" class="absolute top-2 right-2 transition"
+                                                onsubmit="confirmDelete(event)">
+                                                <input type="hidden" name="intention_id"
+                                                    value="<?php echo $intention['id']; ?>">
+                                                <input type="hidden" name="delete_intention" value="1">
+                                                <button type="submit"
+                                                    class="text-red-400 hover:text-red-700 p-0.5 cursor-pointer"
+                                                    title="Excluir intenção">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                                        </path>
+                                                    </svg>
+                                                </button>
+                                            </form>
+                                        </li>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                                <?php if (!$hasSell): ?>
+                                    <li class="text-xs text-gray-400 italic py-2 bg-gray-50 p-3 rounded">Nenhuma intenção de
+                                        venda registrada.</li>
+                                <?php endif; ?>
+                            </ul>
+                        </div>
                     </div>
                 </div>
-
             </main>
         </div>
     </div>

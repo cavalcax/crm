@@ -55,9 +55,60 @@ try {
         if (!in_array('production_system', $columns)) {
             $pdo->exec("ALTER TABLE " . TABLE_NAME . "clients ADD COLUMN production_system VARCHAR(255) NULL");
         }
-        if (!in_array('created_at', $columns)) {
-            $pdo->exec("ALTER TABLE " . TABLE_NAME . "clients ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
-        }
+
+        // Auto-migration: ensure notifications_enabled column exists on users table
+        try {
+            $userColumns = $pdo->query("SHOW COLUMNS FROM " . TABLE_NAME . "users")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('notifications_enabled', $userColumns)) {
+                $pdo->exec("ALTER TABLE " . TABLE_NAME . "users ADD COLUMN notifications_enabled TINYINT(1) DEFAULT 1");
+            }
+        } catch (Exception $e) {}
+
+        // Auto-migration: ensure notifications table exists
+        $pdo->exec("CREATE TABLE IF NOT EXISTS " . TABLE_NAME . "notifications (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            schedule_id INT NULL,
+            title VARCHAR(255) NOT NULL,
+            message TEXT NOT NULL,
+            type VARCHAR(50) DEFAULT 'meeting_reminder',
+            is_read TINYINT(1) DEFAULT 0,
+            read_at DATETIME NULL,
+            link VARCHAR(255) NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_user (user_id),
+            INDEX idx_is_read (is_read),
+            INDEX idx_schedule (schedule_id),
+            UNIQUE KEY uk_user_schedule_type (user_id, schedule_id, type)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Auto-migration: ensure push_subscriptions table exists
+        $pdo->exec("CREATE TABLE IF NOT EXISTS " . TABLE_NAME . "push_subscriptions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            endpoint TEXT NOT NULL,
+            endpoint_hash VARCHAR(64) NOT NULL,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_user (user_id),
+            UNIQUE KEY uk_user_endpoint (user_id, endpoint_hash)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Auto-migration: ensure interactions table exists
+        $pdo->exec("CREATE TABLE IF NOT EXISTS " . TABLE_NAME . "interactions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            client_id INT NOT NULL,
+            user_id INT NOT NULL,
+            interaction_date DATE NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            description TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_client (client_id),
+            INDEX idx_user (user_id),
+            INDEX idx_date (interaction_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     } catch (Exception $e) {
         // Table may not exist yet or connection error during setup
     }
@@ -65,5 +116,7 @@ try {
     die("Erro na conexão com o banco de dados: " . $e->getMessage());
 }
 
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 ?>

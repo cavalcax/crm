@@ -156,7 +156,7 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
         $locParts = array_filter([$event['city'] ?? '', $event['uf'] ?? '']);
         $locStr = !empty($locParts) ? implode(' / ', $locParts) : '';
 ?>
-                    <div class="flex items-start <?php echo $isPast ? 'opacity-60' : ''; ?> event-row group" data-date="<?php echo $eventDateStr; ?>">
+                    <div id="event-<?php echo $event['id']; ?>" class="flex items-start <?php echo $isPast ? 'opacity-60' : ''; ?> event-row group transition duration-300 rounded-2xl p-1" data-id="<?php echo $event['id']; ?>" data-date="<?php echo $eventDateStr; ?>">
                         <div class="flex flex-col items-center mr-4 w-16">
                             <div class="text-sm font-bold text-gray-500 uppercase tracking-wide">
                                 <?php echo $monthShort; ?>
@@ -342,6 +342,22 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
 
         // Run initial filter on page load
         filterEvents();
+
+        // Highlight event if passed in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const highlightId = urlParams.get('highlight');
+        if (highlightId) {
+            const targetEl = document.getElementById('event-' + highlightId);
+            if (targetEl) {
+                // Ensure date filter doesn't hide it
+                targetEl.style.display = '';
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                targetEl.classList.add('ring-4', 'ring-brand-500', 'bg-brand-50/80');
+                setTimeout(() => {
+                    targetEl.classList.remove('ring-4', 'ring-brand-500', 'bg-brand-50/80');
+                }, 4000);
+            }
+        }
     </script>
 </body>
 
