@@ -20,7 +20,12 @@ $type_filter = isset($_GET['type']) ? sanitize($_GET['type']) : 'all'; // 'buy' 
 $producer_filter = isset($_GET['producer']) ? sanitize($_GET['producer']) : '';
 $search_filter = isset($_GET['q']) ? sanitize($_GET['q']) : '';
 
-// Build dynamic query
+$raw_milk_min = sanitize($_GET['milk_min'] ?? '');
+$raw_milk_max = sanitize($_GET['milk_max'] ?? '');
+$milk_min_num = (int)preg_replace('/\D/', '', $raw_milk_min);
+$milk_max_num = (int)preg_replace('/\D/', '', $raw_milk_max);
+
+// Dynamic query
 $query = "
     SELECT c.id as client_id, c.name as client_name, c.farm_name, c.phone, c.email, c.uf, c.city, c.status, c.is_potential,
            c.payment_condition, c.breed_interests, c.animal_categories, c.production_system, c.is_milk_producer, c.acquisition_reason,
@@ -134,6 +139,27 @@ if ($producer_filter !== '') {
     $params[':producer'] = $producer_filter;
 }
 
+// Monthly Milk Production Range filter (when both are 0 / empty, it does not filter)
+if ($milk_min_num > 0 && $milk_max_num > 0 && $milk_min_num > $milk_max_num) {
+    $temp = $milk_min_num;
+    $milk_min_num = $milk_max_num;
+    $milk_max_num = $temp;
+}
+
+if ($milk_min_num > 0 || $milk_max_num > 0) {
+    if ($milk_min_num > 0 && $milk_max_num > 0) {
+        $query .= " AND CAST(REPLACE(COALESCE(c.milk_production_range, '0'), '.', '') AS UNSIGNED) BETWEEN :milk_min AND :milk_max";
+        $params[':milk_min'] = $milk_min_num;
+        $params[':milk_max'] = $milk_max_num;
+    } elseif ($milk_min_num > 0) {
+        $query .= " AND CAST(REPLACE(COALESCE(c.milk_production_range, '0'), '.', '') AS UNSIGNED) >= :milk_min";
+        $params[':milk_min'] = $milk_min_num;
+    } elseif ($milk_max_num > 0) {
+        $query .= " AND CAST(REPLACE(COALESCE(c.milk_production_range, '0'), '.', '') AS UNSIGNED) <= :milk_max AND CAST(REPLACE(COALESCE(c.milk_production_range, '0'), '.', '') AS UNSIGNED) > 0";
+        $params[':milk_max'] = $milk_max_num;
+    }
+}
+
 // Intention Category multi-filter
 if (!empty($category_id_filters)) {
     $catIdPlaceholders = [];
@@ -181,17 +207,20 @@ foreach ($categories as $c) {
     $categoryOptions[$c['id']] = $c['name'];
 }
 
+$isMilkFilterActive = ($milk_min_num > 0 || $milk_max_num > 0);
+
 // Check if any filter is active
 $hasActiveFilters = !empty($status_filters) || !empty($uf_filters) || !empty($breed_filters) || 
                      !empty($animal_cat_filters) || !empty($prod_system_filters) || !empty($payment_filters) || 
                      !empty($category_id_filters) || $potential_filter !== '' || ($type_filter !== 'all' && !empty($type_filter)) || 
-                     $producer_filter !== '' || !empty($search_filter);
+                     $producer_filter !== '' || !empty($search_filter) || $isMilkFilterActive;
 
 $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_filters) + 
                      count($animal_cat_filters) + count($prod_system_filters) + count($payment_filters) + 
                      count($category_id_filters) + ($potential_filter !== '' ? 1 : 0) + 
                      (($type_filter !== 'all' && !empty($type_filter)) ? 1 : 0) + 
-                     ($producer_filter !== '' ? 1 : 0) + (!empty($search_filter) ? 1 : 0);
+                     ($producer_filter !== '' ? 1 : 0) + (!empty($search_filter) ? 1 : 0) + 
+                     ($isMilkFilterActive ? 1 : 0);
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -275,28 +304,28 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                     </div>
 
                     <form method="GET" action="reports.php" id="reportFilterForm" class="space-y-4">
-                        <!-- Top Search Bar -->
-                        <div class="relative">
-                            <label class="block text-xs font-bold text-gray-700 mb-1">Busca Geral (Nome, Fazenda, Telefone, Cidade...)</label>
-                            <div class="relative">
-                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                                    </svg>
-                                </span>
-                                <input type="text" name="q" value="<?php echo htmlspecialchars($search_filter); ?>"
-                                    class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm"
-                                    placeholder="Ex: João, Fazenda Boa Vista, (19) 99999-9999, Campinas...">
-                            </div>
-                        </div>
-
-                        <!-- Grid with all multi-select & selector filters -->
+                        <!-- Grid with all filters organized in 4 columns -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <!-- 1. Status do Cliente (Multi-select) -->
+                            <!-- 1. Busca Geral (Ocupa 2 colunas / 50% da largura) -->
+                            <div class="sm:col-span-2 lg:col-span-2">
+                                <label class="block text-xs font-bold text-gray-700 mb-1">Busca Geral (Nome, Fazenda, Telefone, Cidade...)</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                        </svg>
+                                    </span>
+                                    <input type="text" name="q" value="<?php echo htmlspecialchars($search_filter); ?>"
+                                        class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm"
+                                        placeholder="Ex: João, Fazenda Boa Vista, (19) 99999-9999, Campinas...">
+                                </div>
+                            </div>
+
+                            <!-- 2. Status do Cliente (Multi-select) -->
                             <?php echo renderMultiSelect('status', 'Status do Cliente', $allStatuses, $status_filters, 'Todos Status'); ?>
 
-                            <!-- 2. Cliente em Potencial (Single select) -->
+                            <!-- 3. Cliente em Potencial (Single select) -->
                             <div>
                                 <label class="block text-xs font-bold text-gray-700 mb-1">Cliente em Potencial</label>
                                 <select name="is_potential" class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
@@ -306,22 +335,22 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                 </select>
                             </div>
 
-                            <!-- 3. UF / Estados (Multi-select with Search) -->
+                            <!-- 4. UF / Estados (Multi-select with Search) -->
                             <?php echo renderMultiSelect('uf', 'UF (Estado)', $ufOptions, $uf_filters, 'Todos os Estados', true); ?>
 
-                            <!-- 4. Raças / Máquinas (Multi-select) -->
+                            <!-- 5. Raças / Máquinas (Multi-select) -->
                             <?php echo renderMultiSelect('breed', 'Raça / Máquinas', $allBreeds, $breed_filters, 'Todas as Raças'); ?>
 
-                            <!-- 5. Categorias de Animais (Multi-select with Search) -->
+                            <!-- 6. Categorias de Animais (Multi-select with Search) -->
                             <?php echo renderMultiSelect('animal_categories', 'Categoria de Animais', $allAnimalCats, $animal_cat_filters, 'Todas as Categorias', true); ?>
 
-                            <!-- 6. Tipo / Sistema de Produção (Multi-select) -->
+                            <!-- 7. Tipo / Sistema de Produção (Multi-select) -->
                             <?php echo renderMultiSelect('production_system', 'Tipo de Produção', $allProdSystems, $prod_system_filters, 'Todos os Tipos'); ?>
 
-                            <!-- 7. Condição de Pagamento (Multi-select) -->
+                            <!-- 8. Condição de Pagamento (Multi-select) -->
                             <?php echo renderMultiSelect('payment', 'Condição de Pagamento', $allPayments, $payment_filters, 'Todas as Condições'); ?>
 
-                            <!-- 8. Produtor de Leite (Single select) -->
+                            <!-- 9. Produtor de Leite (Single select) -->
                             <div>
                                 <label class="block text-xs font-bold text-gray-700 mb-1">Produtor de Leite?</label>
                                 <select name="producer" class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
@@ -331,10 +360,38 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                 </select>
                             </div>
 
-                            <!-- 9. Categoria de Intenção (Multi-select) -->
+                            <!-- 10. Leite Mensal Inicial (L/mês) -->
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 mb-1">Leite Mensal Inicial</label>
+                                <div class="relative">
+                                    <input type="text" inputmode="numeric" name="milk_min" id="milkMinInput"
+                                        value="<?php echo htmlspecialchars(!empty($raw_milk_min) && $raw_milk_min !== '0.000' ? $raw_milk_min : ''); ?>"
+                                        placeholder="0.000"
+                                        class="w-full border border-gray-300 p-2 pr-16 rounded-lg text-xs sm:text-sm shadow-sm bg-white font-semibold text-gray-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 milk-range-mask">
+                                    <span class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-[10px] font-bold text-gray-400 uppercase">
+                                        L/mês
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- 11. Leite Mensal Final (L/mês) -->
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 mb-1">Leite Mensal Final</label>
+                                <div class="relative">
+                                    <input type="text" inputmode="numeric" name="milk_max" id="milkMaxInput"
+                                        value="<?php echo htmlspecialchars(!empty($raw_milk_max) && $raw_milk_max !== '0.000' ? $raw_milk_max : ''); ?>"
+                                        placeholder="0.000"
+                                        class="w-full border border-gray-300 p-2 pr-16 rounded-lg text-xs sm:text-sm shadow-sm bg-white font-semibold text-gray-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 milk-range-mask">
+                                    <span class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-[10px] font-bold text-gray-400 uppercase">
+                                        L/mês
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- 12. Categoria de Intenção (Multi-select) -->
                             <?php echo renderMultiSelect('category_id', 'Categoria de Intenção', $categoryOptions, $category_id_filters, 'Todas as Intenções'); ?>
 
-                            <!-- 10. Tipo de Intenção (Single select) -->
+                            <!-- 13. Tipo de Intenção (Single select) -->
                             <div>
                                 <label class="block text-xs font-bold text-gray-700 mb-1">Tipo de Intenção</label>
                                 <select name="type" class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
@@ -344,10 +401,10 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                 </select>
                             </div>
 
-                            <!-- Action Buttons -->
-                            <div class="sm:col-span-2 flex items-end gap-2 pt-1">
+                            <!-- 14. Botões de Ação (Ocupam 2 colunas / preenchem a linha) -->
+                            <div class="sm:col-span-2 lg:col-span-2 flex items-end gap-2 pt-1">
                                 <button type="submit"
-                                    class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 px-5 rounded-lg shadow-md transition transform hover:-translate-y-0.5 active:translate-y-0 text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer">
+                                    class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold py-2 px-5 rounded-lg shadow-md transition transform hover:-translate-y-0.5 active:translate-y-0 text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer h-[38px]">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
                                     </svg>
@@ -355,7 +412,7 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                 </button>
                                 <?php if ($hasActiveFilters): ?>
                                     <a href="reports.php"
-                                        class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2.5 px-4 rounded-lg transition text-xs sm:text-sm flex items-center justify-center">
+                                        class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-lg transition text-xs sm:text-sm flex items-center justify-center h-[38px]">
                                         Limpar
                                     </a>
                                 <?php endif; ?>
@@ -677,10 +734,60 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                     });
                 }
             });
-            // Show loading modal on form submit
-            const filterForm = document.querySelector('form[method="GET"]');
+            // Monthly Milk Production Thousand Mask & Interval Validation
+            function formatMilkLiters(value) {
+                let clean = (value || '').toString().replace(/\D/g, '');
+                clean = clean.replace(/^0+/, '');
+                if (!clean) {
+                    return '0.000';
+                }
+                const padded = clean.padStart(4, '0');
+                const mainPart = padded.slice(0, -3);
+                const decimalPart = padded.slice(-3);
+                const formattedMain = parseInt(mainPart, 10).toLocaleString('pt-BR');
+                return `${formattedMain}.${decimalPart}`;
+            }
+
+            document.querySelectorAll('.milk-range-mask').forEach(input => {
+                if (input.value && input.value !== '0.000') {
+                    input.value = formatMilkLiters(input.value);
+                }
+                input.addEventListener('input', function () {
+                    this.value = formatMilkLiters(this.value);
+                });
+                input.addEventListener('focus', function () {
+                    if (!this.value || this.value === '0.000') {
+                        this.value = '0.000';
+                    }
+                    setTimeout(() => this.select(), 50);
+                });
+                input.addEventListener('blur', function () {
+                    const clean = this.value.replace(/\D/g, '');
+                    if (!clean || parseInt(clean, 10) === 0) {
+                        this.value = '';
+                    } else {
+                        this.value = formatMilkLiters(this.value);
+                    }
+                });
+            });
+
+            // Show loading modal on form submit + validate interval
+            const filterForm = document.getElementById('reportFilterForm') || document.querySelector('form[method="GET"]');
             if (filterForm) {
-                filterForm.addEventListener('submit', () => {
+                filterForm.addEventListener('submit', (e) => {
+                    const minEl = document.getElementById('milkMinInput');
+                    const maxEl = document.getElementById('milkMaxInput');
+                    if (minEl && maxEl) {
+                        const minNum = parseInt(minEl.value.replace(/\D/g, '') || '0', 10);
+                        const maxNum = parseInt(maxEl.value.replace(/\D/g, '') || '0', 10);
+                        if (minNum > 0 && maxNum > 0 && minNum > maxNum) {
+                            e.preventDefault();
+                            alert('Atenção: A quantidade de Leite Mensal Final deve ser maior ou igual à Inicial.');
+                            maxEl.focus();
+                            return false;
+                        }
+                    }
+
                     const overlay = document.getElementById('reportsLoadingOverlay');
                     if (overlay) {
                         overlay.classList.remove('opacity-0', 'pointer-events-none');

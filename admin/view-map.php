@@ -106,7 +106,8 @@ $auctionsJson = json_encode($validAuctions);
         }
     </script>
     <style>
-        html, body {
+        html,
+        body {
             height: 100% !important;
             max-height: 100% !important;
             width: 100% !important;
@@ -138,7 +139,8 @@ $auctionsJson = json_encode($validAuctions);
             -webkit-overflow-scrolling: touch;
         }
 
-        body.swal2-shown, html.swal2-shown {
+        body.swal2-shown,
+        html.swal2-shown {
             height: 100% !important;
             max-height: 100% !important;
             overflow: hidden !important;
@@ -195,6 +197,7 @@ $auctionsJson = json_encode($validAuctions);
             color: #9ca3af !important;
             box-shadow: none !important;
         }
+
         .swal2-close:hover {
             color: #374151 !important;
         }
@@ -202,6 +205,7 @@ $auctionsJson = json_encode($validAuctions);
         .custom-scroll::-webkit-scrollbar {
             width: 5px;
         }
+
         .custom-scroll::-webkit-scrollbar-thumb {
             background-color: #cbd5e1;
             border-radius: 9999px;
@@ -260,11 +264,13 @@ $auctionsJson = json_encode($validAuctions);
     <div class="absolute top-2.5 right-2.5 z-20 flex items-center">
         <button id="toggleListBtn" onclick="toggleSidebar()"
             class="bg-white hover:bg-gray-50 text-gray-800 font-bold h-[42px] px-4 rounded-none shadow-md border border-gray-300 flex items-center transition text-xs sm:text-sm cursor-pointer">
-            <svg class="w-4 h-4 mr-1.5 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 mr-1.5 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path>
             </svg>
             <span id="listBtnLabel">Ver Lista</span>
-            <span class="ml-1.5 bg-brand-100 text-brand-800 text-[11px] font-extrabold px-2 py-0.5 rounded-full"><?php echo $totalMapItems; ?></span>
+            <span
+                class="ml-1.5 bg-brand-100 text-brand-800 text-[11px] font-extrabold px-2 py-0.5 rounded-full"><?php echo $totalMapItems; ?></span>
         </button>
     </div>
 
@@ -272,24 +278,27 @@ $auctionsJson = json_encode($validAuctions);
     <div id="map"></div>
 
     <!-- Collapsible Sidebar / Drawer for Items List -->
-    <div id="clientSidebar" 
-         class="fixed top-0 right-0 bottom-0 h-full w-full sm:w-96 bg-white shadow-2xl z-30 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col border-l border-gray-200 invisible pointer-events-none">
+    <div id="clientSidebar"
+        class="fixed top-0 right-0 bottom-0 h-full w-full sm:w-96 bg-white shadow-2xl z-30 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col border-l border-gray-200 invisible pointer-events-none">
         <!-- Sidebar Header -->
         <div class="p-4 border-b border-gray-200 bg-brand-50/80 flex items-center justify-between">
             <div>
                 <h3 class="font-bold text-brand-900 text-base">Itens no Mapa</h3>
                 <p class="text-xs text-gray-500">Clique para aproximar e ver detalhes</p>
             </div>
-            <button onclick="toggleSidebar()" class="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition cursor-pointer">
+            <button onclick="toggleSidebar()"
+                class="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition cursor-pointer">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
                 </svg>
             </button>
         </div>
 
         <!-- Status Badges / Quantidade por Status (Above Search Input) -->
         <div class="p-3 border-b border-gray-100 bg-brand-50/40">
-            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Filtro por Categoria / Status</p>
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Filtro por Categoria / Status
+            </p>
             <div class="flex items-center gap-1.5 flex-wrap" id="statusChipsContainer">
                 <!-- Dynamically populated via JS -->
             </div>
@@ -300,7 +309,8 @@ $auctionsJson = json_encode($validAuctions);
             <div class="relative">
                 <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none">
                     <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                     </svg>
                 </span>
                 <input type="text" id="sidebarSearch" onkeyup="filterSidebarList()"
@@ -316,7 +326,8 @@ $auctionsJson = json_encode($validAuctions);
     </div>
 
     <!-- Overlay on Mobile when Sidebar is Open -->
-    <div id="sidebarOverlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/40 z-25 hidden sm:hidden backdrop-blur-xs"></div>
+    <div id="sidebarOverlay" onclick="toggleSidebar()"
+        class="fixed inset-0 bg-black/40 z-25 hidden sm:hidden backdrop-blur-xs"></div>
 
     <script>
         const clients = <?php echo $clientsJson; ?>;
@@ -825,7 +836,7 @@ $auctionsJson = json_encode($validAuctions);
                 const activeClasses = isActive
                     ? 'bg-brand-800 text-white font-bold border-brand-800 shadow-xs'
                     : 'bg-white text-gray-700 font-medium border-gray-200/90 hover:bg-gray-50 hover:border-gray-300';
-                
+
                 const countBadgeClasses = isActive
                     ? 'bg-white/20 text-white'
                     : 'bg-gray-100 text-gray-700';
@@ -1049,39 +1060,39 @@ $auctionsJson = json_encode($validAuctions);
 
                         <div class="grid grid-cols-2 gap-1.5 sm:gap-2 text-xs">
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">1. Pagamento</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">Pagamento</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.payment_condition || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">2. Raças / Máquinas</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">Raças / Máquinas</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.breed_interests || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80 col-span-2">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">3. Categorias de Animais</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">Categorias de Animais</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.animal_categories || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">4. Sistema de Produção</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">Sistema de Produção</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.production_system || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">5. Produtor Leite</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">Produtor Leite</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.is_milk_producer || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">6. Motivo Aquisição</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">Motivo Aquisição</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.acquisition_reason || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">7. Qtd. a Adquirir</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">Qtd. a Adquirir</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.purchase_animal_count || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">8. Qtd. Animais Possuídos</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">Qtd. Animais Possuídos</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.animal_count_range || '-'}</p>
                             </div>
                             <div class="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
-                                <p class="font-bold text-amber-900 text-[10px] uppercase">9. Produção Mensal Leite</p>
+                                <p class="font-bold text-amber-900 text-[10px] uppercase">Produção Mensal Leite</p>
                                 <p class="text-gray-900 font-semibold text-xs mt-0.5 break-words">${client.milk_production_range || '-'}</p>
                             </div>
                         </div>

@@ -83,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Por favor, responda se você já é produtor de leite.";
     } elseif (empty($animal_count_range)) {
         $error = "Por favor, selecione a quantidade de animais que possui atualmente.";
-    } elseif (empty($milk_production_range) || $milk_production_range === '0.000' || (int)preg_replace('/\D/', '', $milk_production_range) === 0) {
+    } elseif (empty($milk_production_range) || $milk_production_range === '0.000' || (int) preg_replace('/\D/', '', $milk_production_range) === 0) {
         $error = "Por favor, informe quantos litros de leite você entrega por mês atualmente.";
     } elseif (empty($name)) {
         $error = "Por favor, informe seu nome completo.";
@@ -97,8 +97,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Já existe um cadastro com este número de telefone em nosso sistema. Se você já se cadastrou ou precisa atualizar seus dados, entre em contato conosco.";
     } else {
         try {
-            $formattedMilkProd = (strpos($milk_production_range, 'litro') === false) 
-                ? $milk_production_range . ' litros/mês' 
+            $formattedMilkProd = (strpos($milk_production_range, 'litro') === false)
+                ? $milk_production_range
                 : $milk_production_range;
 
             $stmt = $pdo->prepare("
@@ -380,13 +380,15 @@ $states = getBrazilianStates();
                         <label for="milkProductionInput" class="block text-brand-900 font-bold mb-1 text-base">
                             Quantos litros de leite você entrega por mês atualmente?
                         </label>
-                        <p class="text-xs text-gray-500 mb-3">Digite a quantidade mensal aproximada de litros de leite entregues.</p>
+                        <p class="text-xs text-gray-500 mb-3">Digite a quantidade mensal aproximada de litros de leite
+                            entregues.</p>
                         <div class="relative max-w-xs">
                             <input type="text" inputmode="numeric" name="milk_production_range" id="milkProductionInput"
                                 value="<?php echo htmlspecialchars(!empty($milk_production_range) ? $milk_production_range : '0.000'); ?>"
                                 required
                                 class="w-full pl-4 pr-24 py-3 border border-gray-300 rounded-lg text-lg font-bold text-gray-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white">
-                            <span class="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-xs font-bold text-gray-400 uppercase">
+                            <span
+                                class="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-xs font-bold text-gray-400 uppercase">
                                 Litros/Mês
                             </span>
                         </div>

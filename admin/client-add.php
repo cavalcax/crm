@@ -37,8 +37,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $acquisition_reason = sanitize($_POST['acquisition_reason'] ?? '');
     $animal_count_range = sanitize($_POST['animal_count_range'] ?? '');
     $rawMilkProd = sanitize($_POST['milk_production_range'] ?? '');
-    if (!empty($rawMilkProd) && $rawMilkProd !== '0.000' && (int)preg_replace('/\D/', '', $rawMilkProd) > 0) {
-        $milk_production_range = (strpos($rawMilkProd, 'litro') === false) ? $rawMilkProd . ' litros/mês' : $rawMilkProd;
+    if (!empty($rawMilkProd) && $rawMilkProd !== '0.000' && (int) preg_replace('/\D/', '', $rawMilkProd) > 0) {
+        $milk_production_range = (strpos($rawMilkProd, 'litro') === false) ? $rawMilkProd : $rawMilkProd;
     } else {
         $milk_production_range = '';
     }
@@ -280,11 +280,13 @@ $states = getBrazilianStates();
                                     Quantos litros de leite você entrega por mês atualmente?
                                 </label>
                                 <div class="relative">
-                                    <input type="text" inputmode="numeric" name="milk_production_range" id="milkProductionInput"
+                                    <input type="text" inputmode="numeric" name="milk_production_range"
+                                        id="milkProductionInput"
                                         value="<?php echo htmlspecialchars(!empty($rawMilkProd) ? $rawMilkProd : '0.000'); ?>"
                                         placeholder="0.000"
                                         class="shadow-sm appearance-none border border-gray-300 rounded w-full py-3 pl-4 pr-24 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-brand-500 font-bold bg-white">
-                                    <span class="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-xs font-bold text-gray-400 uppercase">
+                                    <span
+                                        class="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-xs font-bold text-gray-400 uppercase">
                                         Litros/Mês
                                     </span>
                                 </div>
