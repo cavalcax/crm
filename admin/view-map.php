@@ -1116,7 +1116,7 @@ $auctionsJson = json_encode($validAuctions);
         window.initMap = initMap;
     </script>
     <script
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBaWNV6Gc1D-0ZNrGBXxEe2qwbcw4OhDFo&callback=initMap&v=weekly&loading=async"
+        src="https://maps.googleapis.com/maps/api/js?key=<?php echo GOOGLE_MAPS_API_KEY; ?>&callback=initMap&v=weekly&loading=async"
         async></script>
 </body>
 

@@ -466,7 +466,7 @@ $states = getBrazilianStates();
         }
     </script>
     <script
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBaWNV6Gc1D-0ZNrGBXxEe2qwbcw4OhDFo&callback=initMap&libraries=places&v=weekly"
+        src="https://maps.googleapis.com/maps/api/js?key=<?php echo GOOGLE_MAPS_API_KEY; ?>&callback=initMap&libraries=places&v=weekly"
         async></script>
 
     <!-- Phone & Milk Mask Script & Duplicate Check -->

@@ -554,7 +554,7 @@ $init_lng = $_POST['longitude'] ?? ($preselected_client['longitude'] ?? '');
         }
     </script>
     <script
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBaWNV6Gc1D-0ZNrGBXxEe2qwbcw4OhDFo&libraries=places&callback=initMap&v=weekly&loading=async"
+        src="https://maps.googleapis.com/maps/api/js?key=<?php echo GOOGLE_MAPS_API_KEY; ?>&libraries=places&callback=initMap&v=weekly&loading=async"
         async></script>
 </body>
 
