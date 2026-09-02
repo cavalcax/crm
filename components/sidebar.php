@@ -10,9 +10,11 @@ $sidebarPrecadastroUrl = $protocol . "://" . $host . $scriptDir . "/precadastro.
     id="sidebar">
     <div>
         <div class="px-2 py-2 text-center border-b border-brand-800 pb-4 mb-2">
-            <div class="bg-white p-1 rounded-lg shadow-md block">
-                <img src="../assets/images/logo.png" alt="Vitor Müller" class="w-full h-24 object-contain mx-auto">
-            </div>
+            <a href="index.php">
+                <div class="bg-white p-1 rounded-lg shadow-md block">
+                    <img src="../assets/images/logo.png" alt="Vitor Müller" class="w-full h-24 object-contain mx-auto">
+                </div>
+            </a>
         </div>
 
         <nav class="mt-6 space-y-1">
@@ -123,16 +125,16 @@ $sidebarPrecadastroUrl = $protocol . "://" . $host . $scriptDir . "/precadastro.
                 </span>
             </button>
             <a href="../logout.php"
-            class="block py-2.5 px-4 rounded transition duration-200 hover:bg-brand-800 hover:text-white mb-4">
-            <span class="flex items-center space-x-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
-                    </path>
-                </svg>
-                <span>Sair</span>
-            </span>
-        </a>
+                class="block py-2.5 px-4 rounded transition duration-200 hover:bg-brand-800 hover:text-white mb-4">
+                <span class="flex items-center space-x-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                        </path>
+                    </svg>
+                    <span>Sair</span>
+                </span>
+            </a>
         </nav>
     </div>
 </aside>
