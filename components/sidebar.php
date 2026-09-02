@@ -74,6 +74,17 @@ $sidebarPrecadastroUrl = $protocol . "://" . $host . $scriptDir . "/precadastro.
                     <span>Mapa de Clientes</span>
                 </span>
             </a>
+            <a href="freight-calculator.php"
+                class="block py-2.5 px-4 rounded transition duration-200 hover:bg-brand-800 hover:text-white <?php echo basename($_SERVER['PHP_SELF']) == 'freight-calculator.php' ? 'bg-brand-800 font-bold' : ''; ?>">
+                <span class="flex items-center space-x-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8h4l3 3v5a1 1 0 01-1 1h-2m-6 0a2 2 0 004 0m-8 0a2 2 0 004 0">
+                        </path>
+                    </svg>
+                    <span>Calculadora de Frete</span>
+                </span>
+            </a>
             <a href="reports.php"
                 class="block py-2.5 px-4 rounded transition duration-200 hover:bg-brand-800 hover:text-white <?php echo basename($_SERVER['PHP_SELF']) == 'reports.php' ? 'bg-brand-800 font-bold' : ''; ?>">
                 <span class="flex items-center space-x-2">
