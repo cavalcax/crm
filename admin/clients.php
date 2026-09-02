@@ -276,9 +276,6 @@ $scopeFilterParam = $_GET['scope'] ?? '';
                                     </th>
                                     <th
                                         class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                        Mapa</th>
-                                    <th
-                                        class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                                         Ações</th>
                                 </tr>
                             </thead>
@@ -435,26 +432,9 @@ $scopeFilterParam = $_GET['scope'] ?? '';
                                                 </span>
                                             </td>
                                             <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                                                <?php if (!empty($client['latitude']) && !empty($client['longitude'])): ?>
-                                                    <a href="https://www.google.com/maps/search/?api=1&query=<?php echo $client['latitude']; ?>,<?php echo $client['longitude']; ?>"
-                                                        target="_blank" class="text-blue-500 hover:text-blue-800"
-                                                        title="Ver no Google Maps">
-                                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z">
-                                                            </path>
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                                        </svg>
-                                                    </a>
-                                                <?php else: ?>
-                                                    <span class="text-gray-400">-</span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                                                 <div class="flex items-center space-x-2.5">
                                                     <!-- 1. Mapa -->
-                                                    <a href="map-selector.php?q=<?php echo urlencode($client['name']); ?>"
+                                                    <a href="view-map.php?client_id=<?php echo $client['id']; ?>"
                                                         class="text-emerald-600 hover:text-emerald-800 p-1 hover:bg-emerald-50 rounded transition" title="Ver no Mapa de Clientes">
                                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

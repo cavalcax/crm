@@ -444,20 +444,17 @@ $states = getBrazilianStates();
                             </select>
                         </div>
 
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">Endereço Completo / Localização da
-                                Fazenda (Opcional)</label>
-                            <input type="text" id="addressInput" name="address"
-                                placeholder="Digite o endereço ou nome da propriedade para buscar..."
+                        <div class="relative" id="addressInputWrapper">
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Endereço Completo / Localização da Fazenda (Busca com Autocompletar)</label>
+                            <input type="text" id="addressInput" name="address" autocomplete="off"
+                                placeholder="Digite rua, fazenda, bairro ou cidade para buscar..."
                                 class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-                            <p class="text-xs text-gray-500 mt-1">Digite o endereço ou selecione no mapa abaixo o local
-                                exato da propriedade.</p>
+                            <p class="text-xs text-gray-500 mt-1">Digite o endereço ou selecione no mapa abaixo o local exato da propriedade.</p>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">Localização no Mapa (Clique no mapa
-                                para marcar)</label>
-                            <div id="map" class="h-80 w-full rounded-xl border border-gray-300 shadow-inner"></div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Localização no Mapa (Clique ou arraste o pino para marcar)</label>
+                            <div id="map" class="h-80 w-full rounded-xl border border-gray-300 shadow-inner z-0"></div>
                             <input type="hidden" name="latitude" id="lat">
                             <input type="hidden" name="longitude" id="lng">
                             <p class="text-xs text-gray-500 mt-2" id="geo-feedback">Lat: -, Long: -</p>
@@ -736,87 +733,227 @@ $states = getBrazilianStates();
         }
     </script>
 
-    <!-- Google Maps Script -->
+    <?php if (defined('MAP_PROVIDER') && MAP_PROVIDER === 'google_maps'): ?>
+    <!-- Google Maps JS API -->
     <script>
-        function initMap() {
-            const defaultPos = { lat: -25.4284, lng: -49.2733 }; // Default position
+        let map = null;
+        let marker = null;
+        let geocoder = null;
 
-            const map = new google.maps.Map(document.getElementById("map"), {
+        function updateInputs(lat, lng) {
+            document.getElementById('lat').value = lat.toFixed(8);
+            document.getElementById('lng').value = lng.toFixed(8);
+            const feedback = document.getElementById('geo-feedback');
+            if (feedback) {
+                feedback.innerText = `Lat: ${lat.toFixed(6)}, Long: ${lng.toFixed(6)}`;
+            }
+        }
+
+        function placeMarker(lat, lng, zoomTo = false) {
+            if (!map) return;
+            const pos = { lat, lng };
+            if (marker) {
+                marker.setPosition(pos);
+            } else {
+                marker = new google.maps.Marker({
+                    position: pos,
+                    map: map,
+                    draggable: true
+                });
+                marker.addListener('dragend', () => {
+                    const p = marker.getPosition();
+                    updateInputs(p.lat(), p.lng());
+                });
+            }
+            updateInputs(lat, lng);
+            if (zoomTo) {
+                map.setCenter(pos);
+                map.setZoom(15);
+            }
+        }
+
+        function geocodeCityState() {
+            if (!geocoder) return;
+            const cityInput = document.getElementById("cityInput");
+            const ufSelect = document.getElementById("ufSelect");
+            const cityVal = cityInput ? cityInput.value.trim() : '';
+            const ufVal = ufSelect ? ufSelect.value.trim() : '';
+            if (!cityVal && !ufVal) return;
+
+            const cleanCity = cityVal.split('/')[0].split('-')[0].trim();
+            const address = [cleanCity, ufVal, 'Brasil'].filter(Boolean).join(', ');
+
+            geocoder.geocode({ address, componentRestrictions: { country: 'BR' } }, (results, status) => {
+                if (status === 'OK' && results[0] && results[0].geometry) {
+                    const lat = results[0].geometry.location.lat();
+                    const lng = results[0].geometry.location.lng();
+                    placeMarker(lat, lng, true);
+                }
+            });
+        }
+
+        function initMap() {
+            const defaultPos = { lat: -25.4284, lng: -49.2733 }; // Curitiba / Paraná default
+            map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 7,
                 center: defaultPos,
-                mapTypeId: "roadmap",
+                mapTypeControl: true,
+                streetViewControl: false
             });
+            geocoder = new google.maps.Geocoder();
 
-            let marker = new google.maps.Marker({
-                map: map,
-                anchorPoint: new google.maps.Point(0, -29),
+            map.addListener('click', (e) => {
+                placeMarker(e.latLng.lat(), e.latLng.lng());
             });
-
-            const geocoder = (window.google && window.google.maps) ? new google.maps.Geocoder() : null;
-            let hasExactAddress = false;
 
             const cityInput = document.getElementById("cityInput");
             const ufSelect = document.getElementById("ufSelect");
+            let cityDebounceTimer = null;
+            if (cityInput) {
+                cityInput.addEventListener('blur', () => geocodeCityState());
+                cityInput.addEventListener('input', () => {
+                    clearTimeout(cityDebounceTimer);
+                    cityDebounceTimer = setTimeout(() => {
+                        if (cityInput.value.trim().length >= 3) {
+                            geocodeCityState();
+                        }
+                    }, 800);
+                });
+            }
+            if (ufSelect) {
+                ufSelect.addEventListener('change', () => geocodeCityState());
+            }
+
             const addressInput = document.getElementById("addressInput");
-
-            function updateInputs(latLng) {
-                if (!latLng) return;
-                const latVal = typeof latLng.lat === 'function' ? latLng.lat() : latLng.lat;
-                const lngVal = typeof latLng.lng === 'function' ? latLng.lng() : latLng.lng;
-                document.getElementById('lat').value = latVal;
-                document.getElementById('lng').value = lngVal;
-                const feedback = document.getElementById('geo-feedback');
-                if (feedback) {
-                    feedback.innerText = 'Lat: ' + Number(latVal).toFixed(6) + ', Long: ' + Number(lngVal).toFixed(6);
-                }
-            }
-
-            function placeMarkerAndPanTo(latLng, zoomLevel = null) {
-                if (!latLng) return;
-                if (marker) {
-                    marker.setPosition(latLng);
-                    marker.setVisible(true);
-                } else {
-                    marker = new google.maps.Marker({
-                        position: latLng,
-                        map: map,
-                    });
-                }
-                map.panTo(latLng);
-                if (zoomLevel) map.setZoom(zoomLevel);
-                updateInputs(latLng);
-            }
-
-            function geocodeCityState(force = false) {
-                if (!geocoder) return;
-                if (hasExactAddress && !force) return;
-
-                const cityVal = cityInput ? cityInput.value.trim() : '';
-                const ufVal = ufSelect ? ufSelect.value.trim() : '';
-                if (!cityVal && !ufVal) return;
-
-                // Extract clean city in case user typed "Castro / Fazenda Bela Vista"
-                const cleanCity = cityVal.split('/')[0].split('-')[0].trim();
-                const addressQuery = [cleanCity, ufVal, 'Brasil'].filter(Boolean).join(', ');
-                if (!addressQuery || addressQuery === 'Brasil') return;
-
-                geocoder.geocode({ address: addressQuery, componentRestrictions: { country: 'BR' } }, (results, status) => {
-                    if (status === 'OK' && results[0] && results[0].geometry) {
-                        const loc = results[0].geometry.location;
-                        map.setCenter(loc);
-                        if (results[0].geometry.viewport) {
-                            map.fitBounds(results[0].geometry.viewport);
-                        } else {
-                            map.setZoom(12);
-                        }
-                        if (marker) {
-                            marker.setPosition(loc);
-                            marker.setVisible(true);
-                        }
-                        updateInputs(loc);
+            if (addressInput && window.google && google.maps && google.maps.places) {
+                const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+                    componentRestrictions: { country: "br" }
+                });
+                autocomplete.addListener("place_changed", () => {
+                    const place = autocomplete.getPlace();
+                    if (place.geometry && place.geometry.location) {
+                        const lat = place.geometry.location.lat();
+                        const lng = place.geometry.location.lng();
+                        placeMarker(lat, lng, true);
                     }
                 });
             }
+
+            if (navigator.geolocation && (!cityInput || !cityInput.value.trim())) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    if (!marker) {
+                        map.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                        map.setZoom(11);
+                    }
+                }, () => {});
+            }
+        }
+        window.initMap = initMap;
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=<?php echo GOOGLE_MAPS_API_KEY; ?>&libraries=places&loading=async&callback=initMap" async defer></script>
+    <?php else: ?>
+    <!-- Leaflet CSS & JS (100% Gratuito) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 99999;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            max-height: 220px;
+            overflow-y: auto;
+            margin-top: 2px;
+        }
+        .autocomplete-item {
+            padding: 8px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+            transition: background 0.15s;
+        }
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+        .autocomplete-item:hover {
+            background: #f0fdf4;
+        }
+    </style>
+
+    <script>
+        let map = null;
+        let marker = null;
+
+        function updateInputs(lat, lng) {
+            document.getElementById('lat').value = lat.toFixed(8);
+            document.getElementById('lng').value = lng.toFixed(8);
+            const feedback = document.getElementById('geo-feedback');
+            if (feedback) {
+                feedback.innerText = `Lat: ${lat.toFixed(6)}, Long: ${lng.toFixed(6)}`;
+            }
+        }
+
+        function placeMarker(lat, lng, zoomTo = false) {
+            if (!map) return;
+            if (marker) {
+                marker.setLatLng([lat, lng]);
+            } else {
+                marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+                marker.on('dragend', () => {
+                    const pos = marker.getLatLng();
+                    updateInputs(pos.lat, pos.lng);
+                });
+            }
+            updateInputs(lat, lng);
+            if (zoomTo) {
+                map.setView([lat, lng], 15);
+            }
+        }
+
+        function geocodeCityState() {
+            const cityInput = document.getElementById("cityInput");
+            const ufSelect = document.getElementById("ufSelect");
+            const cityVal = cityInput ? cityInput.value.trim() : '';
+            const ufVal = ufSelect ? ufSelect.value.trim() : '';
+            if (!cityVal && !ufVal) return;
+
+            const cleanCity = cityVal.split('/')[0].split('-')[0].trim();
+            const query = [cleanCity, ufVal, 'Brasil'].filter(Boolean).join(', ');
+
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=br&limit=1&q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        const lat = parseFloat(data[0].lat);
+                        const lng = parseFloat(data[0].lon);
+                        placeMarker(lat, lng, true);
+                    }
+                })
+                .catch(() => {});
+        }
+
+        function initMap() {
+            const defaultPos = [-25.4284, -49.2733]; // Curitiba / Paraná default
+
+            map = L.map('map').setView(defaultPos, 7);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            map.on('click', (e) => {
+                placeMarker(e.latlng.lat, e.latlng.lng);
+            });
+
+            const cityInput = document.getElementById("cityInput");
+            const ufSelect = document.getElementById("ufSelect");
 
             let cityDebounceTimer = null;
             if (cityInput) {
@@ -835,84 +972,75 @@ $states = getBrazilianStates();
                 ufSelect.addEventListener('change', () => geocodeCityState());
             }
 
-            if (addressInput && window.google && window.google.maps && window.google.maps.places) {
-                const autocomplete = new google.maps.places.Autocomplete(addressInput, {
-                    componentRestrictions: { country: 'BR' }
+            // Autocomplete de endereço gratuito via Nominatim
+            const addressInput = document.getElementById("addressInput");
+            const wrapper = document.getElementById("addressInputWrapper");
+            if (addressInput && wrapper) {
+                const dropdown = document.createElement("div");
+                dropdown.className = "autocomplete-dropdown hidden";
+                wrapper.appendChild(dropdown);
+
+                let debounceTimer = null;
+                addressInput.addEventListener("input", () => {
+                    const query = addressInput.value.trim();
+                    clearTimeout(debounceTimer);
+                    if (query.length < 3) {
+                        dropdown.classList.add("hidden");
+                        dropdown.innerHTML = "";
+                        return;
+                    }
+
+                    debounceTimer = setTimeout(() => {
+                        fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=br&limit=5&q=${encodeURIComponent(query)}`)
+                            .then(res => res.json())
+                            .then(data => {
+                                dropdown.innerHTML = "";
+                                if (!data || data.length === 0) {
+                                    dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-gray-500">Nenhum endereço encontrado</div>';
+                                    dropdown.classList.remove("hidden");
+                                    return;
+                                }
+                                data.forEach(item => {
+                                    const opt = document.createElement("div");
+                                    opt.className = "autocomplete-item";
+                                    opt.innerHTML = `<span class="font-bold text-gray-800">${item.display_name.split(',')[0]}</span><span class="text-gray-500 text-[11px] block truncate">${item.display_name}</span>`;
+                                    opt.addEventListener("click", () => {
+                                        addressInput.value = item.display_name;
+                                        dropdown.classList.add("hidden");
+                                        const lat = parseFloat(item.lat);
+                                        const lng = parseFloat(item.lon);
+                                        placeMarker(lat, lng, true);
+                                    });
+                                    dropdown.appendChild(opt);
+                                });
+                                dropdown.classList.remove("hidden");
+                            })
+                            .catch(() => dropdown.classList.add("hidden"));
+                    }, 350);
                 });
-                autocomplete.bindTo("bounds", map);
+
+                document.addEventListener("click", (e) => {
+                    if (!wrapper.contains(e.target)) dropdown.classList.add("hidden");
+                });
 
                 addressInput.addEventListener("keydown", (e) => {
                     if (e.key === "Enter") e.preventDefault();
                 });
-
-                autocomplete.addListener("place_changed", () => {
-                    const place = autocomplete.getPlace();
-
-                    if (!place.geometry || !place.geometry.location) {
-                        return;
-                    }
-
-                    hasExactAddress = true;
-                    if (place.geometry.viewport) {
-                        map.fitBounds(place.geometry.viewport);
-                    } else {
-                        map.setCenter(place.geometry.location);
-                        map.setZoom(17);
-                    }
-
-                    placeMarkerAndPanTo(place.geometry.location, 17);
-                });
-
-                addressInput.addEventListener('blur', () => {
-                    const addr = addressInput.value.trim();
-                    if (!addr) {
-                        hasExactAddress = false;
-                        geocodeCityState(true);
-                        return;
-                    }
-
-                    if (!hasExactAddress && addr.length > 5 && geocoder) {
-                        const cityVal = cityInput ? cityInput.value.trim().split('/')[0].trim() : '';
-                        const ufVal = ufSelect ? ufSelect.value.trim() : '';
-                        const fullAddr = [addr, cityVal, ufVal, 'Brasil'].filter(Boolean).join(', ');
-
-                        geocoder.geocode({ address: fullAddr, componentRestrictions: { country: 'BR' } }, (results, status) => {
-                            if (status === 'OK' && results[0] && results[0].geometry) {
-                                hasExactAddress = true;
-                                const loc = results[0].geometry.location;
-                                placeMarkerAndPanTo(loc, 16);
-                            }
-                        });
-                    }
-                });
             }
 
-            // Click on map
-            map.addListener("click", (e) => {
-                hasExactAddress = true;
-                placeMarkerAndPanTo(e.latLng);
-            });
-
-            // Try Geolocation as initial hint if inputs are empty
+            // Tenta obter geolocalização se campos estiverem vazios
             if (navigator.geolocation && (!cityInput || !cityInput.value.trim())) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        if (!hasExactAddress && (!cityInput || !cityInput.value.trim())) {
-                            const pos = {
-                                lat: position.coords.latitude,
-                                lng: position.coords.longitude,
-                            };
-                            map.setCenter(pos);
-                            map.setZoom(11);
-                        }
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    if (!marker) {
+                        map.setView([pos.coords.latitude, pos.coords.longitude], 11);
                     }
-                );
+                }, () => {});
             }
         }
+
+        document.addEventListener('DOMContentLoaded', initMap);
     </script>
-    <script
-        src="https://maps.googleapis.com/maps/api/js?key=<?php echo GOOGLE_MAPS_API_KEY; ?>&callback=initMap&libraries=places&v=weekly"
-        async></script>
+    <?php endif; ?>
 </body>
 
 </html>

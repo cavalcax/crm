@@ -209,18 +209,18 @@ $states = getBrazilianStates();
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <div class="md:col-span-2">
-                                <label class="block text-gray-700 text-sm font-bold mb-2">Endereço / Propriedade</label>
-                                <input type="text" id="addressInput" name="address"
+                            <div class="md:col-span-2 relative" id="addressInputWrapper">
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Endereço / Propriedade (Busca com Autocompletar)</label>
+                                <input type="text" id="addressInput" name="address" autocomplete="off"
+                                    placeholder="Digite rua, fazenda, bairro ou cidade..."
                                     class="shadow-sm appearance-none border border-gray-300 rounded w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-brand-500">
                             </div>
                         </div>
 
                         <!-- Map Section -->
                         <div class="mb-6">
-                            <label class="block text-gray-700 text-sm font-bold mb-2">Localização (Clique no mapa para
-                                marcar)</label>
-                            <div id="map" class="h-96 w-full rounded-lg border border-gray-300 shadow-inner"></div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2">Localização (Clique ou arraste o pino no mapa)</label>
+                            <div id="map" class="h-96 w-full rounded-lg border border-gray-300 shadow-inner z-0"></div>
                             <input type="hidden" name="latitude" id="lat">
                             <input type="hidden" name="longitude" id="lng">
                             <p class="text-sm text-gray-500 mt-2" id="geo-feedback">Lat: -, Long: -</p>
@@ -370,104 +370,257 @@ $states = getBrazilianStates();
         </div>
     </div>
 
-    <!-- Google Maps script -->
+    <?php if (defined('MAP_PROVIDER') && MAP_PROVIDER === 'google_maps'): ?>
+    <!-- Google Maps JS API -->
     <script>
-        function initMap() {
-            // Default center (can be user's approximate location or generic)
-            const defaultPos = { lat: -23.550520, lng: -46.633308 }; // Sao Paulo
+        let map = null;
+        let marker = null;
 
-            const map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 12,
-                center: defaultPos,
-                mapTypeId: "roadmap",
-            });
+        function updateInputs(lat, lng) {
+            document.getElementById('lat').value = lat.toFixed(8);
+            document.getElementById('lng').value = lng.toFixed(8);
+            document.getElementById('geo-feedback').innerText = `Lat: ${lat.toFixed(6)}, Long: ${lng.toFixed(6)}`;
+        }
 
-            // Marker
-            let marker = new google.maps.Marker({
-                map: map,
-                anchorPoint: new google.maps.Point(0, -29),
-            });
-
-            // Try HTML5 geolocation
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const pos = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude,
-                        };
-                        map.setCenter(pos);
-                        // Optional: don't auto-place marker on geolocation, just center
-                    }
-                );
+        function placeMarker(lat, lng, zoomTo = false) {
+            if (!map) return;
+            const pos = { lat, lng };
+            if (marker) {
+                marker.setPosition(pos);
+            } else {
+                marker = new google.maps.Marker({
+                    position: pos,
+                    map: map,
+                    draggable: true
+                });
+                marker.addListener('dragend', () => {
+                    const p = marker.getPosition();
+                    updateInputs(p.lat(), p.lng());
+                });
             }
-
-            // --- Autocomplete ---
-            const input = document.getElementById("addressInput");
-            const autocomplete = new google.maps.places.Autocomplete(input);
-            autocomplete.bindTo("bounds", map);
-
-            // Prevent form submit on enter
-            input.addEventListener("keydown", (e) => {
-                if (e.key === "Enter") e.preventDefault();
-            });
-
-            autocomplete.addListener("place_changed", () => {
-                marker.setVisible(false);
-                const place = autocomplete.getPlace();
-
-                if (!place.geometry || !place.geometry.location) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Endereço não encontrado',
-                        text: "Não foi possível encontrar detalhes para o endereço: '" + place.name + "'"
-                    });
-                    return;
-                }
-
-                // If the place has a geometry, then present it on a map.
-                if (place.geometry.viewport) {
-                    map.fitBounds(place.geometry.viewport);
-                } else {
-                    map.setCenter(place.geometry.location);
-                    map.setZoom(17);
-                }
-
-                marker.setPosition(place.geometry.location);
-                marker.setVisible(true);
-
-                updateInputs(place.geometry.location);
-            });
-
-            // --- Click on Map ---
-            map.addListener("click", (e) => {
-                placeMarkerAndPanTo(e.latLng, map);
-            });
-
-            function placeMarkerAndPanTo(latLng, map) {
-                if (marker) {
-                    marker.setPosition(latLng);
-                    marker.setVisible(true);
-                } else {
-                    marker = new google.maps.Marker({
-                        position: latLng,
-                        map: map,
-                    });
-                }
-                updateInputs(latLng);
-                // map.panTo(latLng); // Optional: keep map steady when clicking
-            }
-
-            function updateInputs(latLng) {
-                document.getElementById('lat').value = latLng.lat();
-                document.getElementById('lng').value = latLng.lng();
-                document.getElementById('geo-feedback').innerText = `Lat: ${latLng.lat().toFixed(6)}, Long: ${latLng.lng().toFixed(6)}`;
+            updateInputs(lat, lng);
+            if (zoomTo) {
+                map.setCenter(pos);
+                map.setZoom(15);
             }
         }
+
+        function initMap() {
+            const defaultPos = { lat: -23.550520, lng: -46.633308 }; // São Paulo / Brasil
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 11,
+                center: defaultPos,
+                mapTypeControl: true,
+                streetViewControl: false
+            });
+
+            map.addListener('click', (e) => {
+                placeMarker(e.latLng.lat(), e.latLng.lng());
+            });
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    map.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                    map.setZoom(12);
+                }, () => {});
+            }
+
+            const ufSelect = document.querySelector('select[name="uf"]');
+            if (ufSelect) {
+                ufSelect.addEventListener('change', () => {
+                    const val = ufSelect.value;
+                    if (!val) return;
+                    const geocoder = new google.maps.Geocoder();
+                    geocoder.geocode({ address: val + ', Brasil' }, (results, status) => {
+                        if (status === 'OK' && results[0] && results[0].geometry) {
+                            const lat = results[0].geometry.location.lat();
+                            const lng = results[0].geometry.location.lng();
+                            placeMarker(lat, lng, true);
+                        }
+                    });
+                });
+            }
+
+            const input = document.getElementById("addressInput");
+            if (input && window.google && google.maps && google.maps.places) {
+                const autocomplete = new google.maps.places.Autocomplete(input, {
+                    componentRestrictions: { country: "br" }
+                });
+                autocomplete.addListener("place_changed", () => {
+                    const place = autocomplete.getPlace();
+                    if (place.geometry && place.geometry.location) {
+                        const lat = place.geometry.location.lat();
+                        const lng = place.geometry.location.lng();
+                        placeMarker(lat, lng, true);
+                    }
+                });
+            }
+        }
+        window.initMap = initMap;
     </script>
-    <script
-        src="https://maps.googleapis.com/maps/api/js?key=<?php echo GOOGLE_MAPS_API_KEY; ?>&callback=initMap&libraries=places&v=weekly"
-        async></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=<?php echo GOOGLE_MAPS_API_KEY; ?>&libraries=places&loading=async&callback=initMap" async defer></script>
+    <?php else: ?>
+    <!-- Leaflet CSS & JS (100% Gratuito) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 99999;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            max-height: 220px;
+            overflow-y: auto;
+            margin-top: 2px;
+        }
+        .autocomplete-item {
+            padding: 8px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+            transition: background 0.15s;
+        }
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+        .autocomplete-item:hover {
+            background: #f0fdf4;
+        }
+    </style>
+
+    <script>
+        let map = null;
+        let marker = null;
+
+        function updateInputs(lat, lng) {
+            document.getElementById('lat').value = lat.toFixed(8);
+            document.getElementById('lng').value = lng.toFixed(8);
+            document.getElementById('geo-feedback').innerText = `Lat: ${lat.toFixed(6)}, Long: ${lng.toFixed(6)}`;
+        }
+
+        function placeMarker(lat, lng, zoomTo = false) {
+            if (!map) return;
+            if (marker) {
+                marker.setLatLng([lat, lng]);
+            } else {
+                marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+                marker.on('dragend', () => {
+                    const pos = marker.getLatLng();
+                    updateInputs(pos.lat, pos.lng);
+                });
+            }
+            updateInputs(lat, lng);
+            if (zoomTo) {
+                map.setView([lat, lng], 15);
+            }
+        }
+
+        function initMap() {
+            const defaultPos = [-23.550520, -46.633308]; // São Paulo / Brasil
+
+            map = L.map('map').setView(defaultPos, 11);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Clique no mapa
+            map.on('click', (e) => {
+                placeMarker(e.latlng.lat, e.latlng.lng);
+            });
+
+            // Geolocalização opcional
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    map.setView([pos.coords.latitude, pos.coords.longitude], 12);
+                }, () => {});
+            }
+
+            const ufSelect = document.querySelector('select[name="uf"]');
+            if (ufSelect) {
+                ufSelect.addEventListener('change', () => {
+                    const val = ufSelect.value;
+                    if (!val) return;
+                    fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=br&limit=1&q=${encodeURIComponent(val + ', Brasil')}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data && data.length > 0) {
+                                const lat = parseFloat(data[0].lat);
+                                const lng = parseFloat(data[0].lon);
+                                placeMarker(lat, lng, true);
+                            }
+                        })
+                        .catch(() => {});
+                });
+            }
+
+            // Autocomplete de endereço gratuito via Nominatim
+            const input = document.getElementById("addressInput");
+            const wrapper = document.getElementById("addressInputWrapper");
+            if (input && wrapper) {
+                const dropdown = document.createElement("div");
+                dropdown.className = "autocomplete-dropdown hidden";
+                wrapper.appendChild(dropdown);
+
+                let debounceTimer = null;
+                input.addEventListener("input", () => {
+                    const query = input.value.trim();
+                    clearTimeout(debounceTimer);
+                    if (query.length < 3) {
+                        dropdown.classList.add("hidden");
+                        dropdown.innerHTML = "";
+                        return;
+                    }
+
+                    debounceTimer = setTimeout(() => {
+                        fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=br&limit=5&q=${encodeURIComponent(query)}`)
+                            .then(res => res.json())
+                            .then(data => {
+                                dropdown.innerHTML = "";
+                                if (!data || data.length === 0) {
+                                    dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-gray-500">Nenhum endereço encontrado</div>';
+                                    dropdown.classList.remove("hidden");
+                                    return;
+                                }
+                                data.forEach(item => {
+                                    const opt = document.createElement("div");
+                                    opt.className = "autocomplete-item";
+                                    opt.innerHTML = `<span class="font-bold text-gray-800">${item.display_name.split(',')[0]}</span><span class="text-gray-500 text-[11px] block truncate">${item.display_name}</span>`;
+                                    opt.addEventListener("click", () => {
+                                        input.value = item.display_name;
+                                        dropdown.classList.add("hidden");
+                                        const lat = parseFloat(item.lat);
+                                        const lng = parseFloat(item.lon);
+                                        placeMarker(lat, lng, true);
+                                    });
+                                    dropdown.appendChild(opt);
+                                });
+                                dropdown.classList.remove("hidden");
+                            })
+                            .catch(() => dropdown.classList.add("hidden"));
+                    }, 350);
+                });
+
+                document.addEventListener("click", (e) => {
+                    if (!wrapper.contains(e.target)) dropdown.classList.add("hidden");
+                });
+
+                input.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") e.preventDefault();
+                });
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", initMap);
+    </script>
+    <?php endif; ?>
 
     <!-- Phone & Milk Mask Script & Duplicate Check -->
     <script>

@@ -360,26 +360,16 @@ $clientSchedules = $stmt->fetchAll();
                                         <?php
                                         $loc = array_filter([$client['city'] ?? '', $client['uf'] ?? '']);
                                         $locStr = !empty($loc) ? implode(' - ', $loc) : 'Sem Cidade/UF';
-
-                                        if (!empty($client['latitude']) && !empty($client['longitude'])) {
-                                            $clientMapUrl = "https://www.google.com/maps/search/?api=1&query=" . $client['latitude'] . "," . $client['longitude'];
-                                        } elseif (!empty($loc)) {
-                                            $clientMapUrl = "https://www.google.com/maps/search/?api=1&query=" . urlencode(implode(' - ', $loc) . ', Brasil');
-                                        } else {
-                                            $clientMapUrl = '';
-                                        }
+                                        $hasCoords = !empty($client['latitude']) && !empty($client['longitude']);
                                         ?>
-                                        <?php if (!empty($clientMapUrl)): ?>
-                                            <a href="<?php echo $clientMapUrl; ?>" target="_blank"
-                                                class="flex items-center text-brand-700 hover:text-brand-900 font-medium hover:underline group"
-                                                title="Abrir localização no Google Maps">
-                                                <svg class="w-4 h-4 mr-1 text-brand-500 group-hover:text-brand-700 flex-shrink-0 transition"
+                                        <?php if ($hasCoords): ?>
+                                            <a href="view-map.php?client_id=<?php echo $client['id']; ?>"
+                                                class="flex items-center text-emerald-700 hover:text-emerald-900 font-medium hover:underline group"
+                                                title="Ver no Mapa de Clientes">
+                                                <svg class="w-4 h-4 mr-1 text-emerald-500 group-hover:text-emerald-700 flex-shrink-0 transition"
                                                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z">
-                                                    </path>
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                        d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
                                                 </svg>
                                                 <span><?php echo htmlspecialchars($locStr); ?></span>
                                             </a>
@@ -511,7 +501,7 @@ $clientSchedules = $stmt->fetchAll();
                                 <?php endif; ?>
 
                                 <!-- Mapa -->
-                                <a href="map-selector.php?q=<?php echo urlencode($client['name']); ?>"
+                                <a href="view-map.php?client_id=<?php echo $client['id']; ?>"
                                     class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3.5 rounded-lg shadow-sm hover:shadow transition flex items-center text-xs md:text-sm hover:-translate-y-0.5"
                                     title="Ver no Mapa de Clientes">
                                     <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

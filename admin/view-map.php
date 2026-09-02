@@ -5,8 +5,23 @@ require_once '../helpers/functions.php';
 requireLogin();
 $user_id = $_SESSION['user_id'];
 
-$client_ids = !empty($_POST['client_ids']) ? array_map('intval', $_POST['client_ids']) : [];
-$auction_ids = !empty($_POST['selected_auctions']) ? array_map('intval', $_POST['selected_auctions']) : [];
+$client_ids = !empty($_POST['client_ids']) ? array_map('intval', (array)$_POST['client_ids']) : [];
+if (empty($client_ids)) {
+    if (!empty($_GET['client_id'])) {
+        $client_ids = [intval($_GET['client_id'])];
+    } elseif (!empty($_GET['client_ids'])) {
+        $client_ids = array_map('intval', (array)$_GET['client_ids']);
+    }
+}
+
+$auction_ids = !empty($_POST['selected_auctions']) ? array_map('intval', (array)$_POST['selected_auctions']) : [];
+if (empty($auction_ids)) {
+    if (!empty($_GET['auction_id'])) {
+        $auction_ids = [intval($_GET['auction_id'])];
+    } elseif (!empty($_GET['selected_auctions'])) {
+        $auction_ids = array_map('intval', (array)$_GET['selected_auctions']);
+    }
+}
 
 if (empty($client_ids) && empty($auction_ids)) {
     header("Location: map-selector.php");
@@ -105,6 +120,17 @@ $auctionsJson = json_encode($validAuctions);
             }
         }
     </script>
+    <?php if (defined('MAP_PROVIDER') && MAP_PROVIDER === 'google_maps'): ?>
+    <!-- MarkerClusterer Library para Google Maps -->
+    <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
+    <?php else: ?>
+    <!-- Leaflet & Leaflet MarkerCluster (100% Gratuito) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <?php endif; ?>
     <style>
         html,
         body {
@@ -126,6 +152,12 @@ $auctionsJson = json_encode($validAuctions);
             width: 100% !important;
             position: absolute;
             inset: 0;
+        }
+
+        /* Custom Leaflet Pin */
+        .custom-leaflet-pin, .custom-auction-pin {
+            background: transparent !important;
+            border: none !important;
         }
 
         /* Compact modern SweetAlert2 styles without wasted header space */
@@ -242,14 +274,12 @@ $auctionsJson = json_encode($validAuctions);
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- MarkerClusterer Library -->
-    <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 </head>
 
 <body class="h-screen w-screen overflow-hidden flex flex-col relative font-sans">
 
     <!-- Bottom Left Controls (Back button) -->
-    <div class="absolute bottom-5 left-3 sm:bottom-6 sm:left-4 z-20 flex items-center">
+    <div class="absolute bottom-5 left-3 sm:bottom-6 sm:left-4 z-[1001] flex items-center" style="z-index: 1001;">
         <a href="map-selector.php"
             class="bg-white/95 hover:bg-white text-gray-800 font-bold py-2.5 px-4 rounded-xl shadow-lg border border-gray-200/80 flex items-center transition hover:-translate-y-0.5 text-xs sm:text-sm backdrop-blur-sm cursor-pointer">
             <svg class="w-4 h-4 mr-1.5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -261,7 +291,7 @@ $auctionsJson = json_encode($validAuctions);
     </div>
 
     <!-- Top Right Controls (Toggle Drawer Button) -->
-    <div class="absolute top-2.5 right-2.5 z-20 flex items-center">
+    <div class="absolute top-2.5 right-2.5 z-[1001] flex items-center" style="z-index: 1001;">
         <button id="toggleListBtn" onclick="toggleSidebar()"
             class="bg-white hover:bg-gray-50 text-gray-800 font-bold h-[42px] px-4 rounded-none shadow-md border border-gray-300 flex items-center transition text-xs sm:text-sm cursor-pointer">
             <svg class="w-4 h-4 mr-1.5 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor"
@@ -279,7 +309,8 @@ $auctionsJson = json_encode($validAuctions);
 
     <!-- Collapsible Sidebar / Drawer for Items List -->
     <div id="clientSidebar"
-        class="fixed top-0 right-0 bottom-0 h-full w-full sm:w-96 bg-white shadow-2xl z-30 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col border-l border-gray-200 invisible pointer-events-none">
+        class="fixed top-0 right-0 bottom-0 h-full w-full sm:w-96 bg-white shadow-2xl z-[1050] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col border-l border-gray-200 invisible pointer-events-none"
+        style="z-index: 1050;">
         <!-- Sidebar Header -->
         <div class="p-4 border-b border-gray-200 bg-brand-50/80 flex items-center justify-between">
             <div>
@@ -327,7 +358,7 @@ $auctionsJson = json_encode($validAuctions);
 
     <!-- Overlay on Mobile when Sidebar is Open -->
     <div id="sidebarOverlay" onclick="toggleSidebar()"
-        class="fixed inset-0 bg-black/40 z-25 hidden sm:hidden backdrop-blur-xs"></div>
+        class="fixed inset-0 bg-black/40 z-[1040] hidden sm:hidden backdrop-blur-xs" style="z-index: 1040;"></div>
 
     <script>
         const clients = <?php echo $clientsJson; ?>;
@@ -337,6 +368,7 @@ $auctionsJson = json_encode($validAuctions);
         let markerMap = {};
         let auctionMarkerMap = {};
         let clustererInstance = null;
+        let clusterGroup = null;
         let isSidebarOpen = false;
         let currentStatusFilter = '';
 
@@ -369,55 +401,62 @@ $auctionsJson = json_encode($validAuctions);
             const statusInfo = getStatusInfo(client.status);
             const isPotential = client.is_potential == 1;
 
-            const innerIcon = isPotential ? `
-                <circle cx="16" cy="14" r="7" fill="#FFFFFF" />
-                <path d="M16 8.5l1.6 3.5 3.8.5-2.8 2.7.7 3.8-3.3-1.8-3.3 1.8.7-3.8-2.8-2.7 3.8-.5z" fill="#D97706" />
-            ` : `
-                <circle cx="16" cy="14" r="5" fill="#FFFFFF" />
-            `;
+            const badgeHtml = isPotential
+                ? `<span style="position: absolute; top: -6px; right: -6px; background: #f59e0b; color: #fff; font-size: 10px; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.4); border: 1.5px solid #fff;">⭐</span>`
+                : '';
 
-            const svg = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 32 42">
-                    <defs>
-                        <filter id="pinShadow" x="-20%" y="-10%" width="140%" height="140%">
-                            <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.35"/>
-                        </filter>
-                    </defs>
-                    <path d="M16 1C8.268 1 2 7.268 2 15c0 11 14 26 14 26s14-15 14-26c0-7.732-6.268-14-14-14z" 
-                          fill="${statusInfo.color}" stroke="#FFFFFF" stroke-width="2" filter="url(#pinShadow)" />
-                    ${innerIcon}
-                </svg>
-            `;
-
-            return {
-                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-                scaledSize: new google.maps.Size(34, 44),
-                anchor: new google.maps.Point(17, 44),
-                labelOrigin: new google.maps.Point(17, -10)
-            };
+            return L.divIcon({
+                className: 'custom-leaflet-pin',
+                html: `
+                    <div style="position: relative; width: 30px; height: 30px;">
+                        <div style="
+                            background-color: ${statusInfo.color};
+                            width: 30px;
+                            height: 30px;
+                            border-radius: 50% 50% 50% 0;
+                            transform: rotate(-45deg);
+                            border: 2px solid #ffffff;
+                            box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        ">
+                            <div style="width: 9px; height: 9px; background-color: #ffffff; border-radius: 50%; box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);"></div>
+                        </div>
+                        ${badgeHtml}
+                    </div>
+                `,
+                iconSize: [30, 30],
+                iconAnchor: [15, 30],
+                popupAnchor: [0, -30]
+            });
         }
 
         function createAuctionPinIcon(auction) {
-            // Distinct Crimson / Ruby Red Pin with white circle (no inner icon)
-            const svg = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 32 42">
-                    <defs>
-                        <filter id="auctionShadow" x="-20%" y="-10%" width="140%" height="140%">
-                            <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.35"/>
-                        </filter>
-                    </defs>
-                    <path d="M16 1C8.268 1 2 7.268 2 15c0 11 14 26 14 26s14-15 14-26c0-7.732-6.268-14-14-14z" 
-                          fill="#DC2626" stroke="#FFFFFF" stroke-width="2" filter="url(#auctionShadow)" />
-                    <circle cx="16" cy="14" r="5" fill="#FFFFFF" />
-                </svg>
-            `;
-
-            return {
-                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-                scaledSize: new google.maps.Size(34, 44),
-                anchor: new google.maps.Point(17, 44),
-                labelOrigin: new google.maps.Point(17, -10)
-            };
+            return L.divIcon({
+                className: 'custom-auction-pin',
+                html: `
+                    <div style="position: relative; width: 32px; height: 32px;">
+                        <div style="
+                            background-color: #dc2626;
+                            width: 32px;
+                            height: 32px;
+                            border-radius: 50% 50% 50% 0;
+                            transform: rotate(-45deg);
+                            border: 2px solid #ffffff;
+                            box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        ">
+                            <div style="width: 9px; height: 9px; background-color: #ffffff; border-radius: 50%; box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);"></div>
+                        </div>
+                    </div>
+                `,
+                iconSize: [32, 32],
+                iconAnchor: [16, 32],
+                popupAnchor: [0, -32]
+            });
         }
 
         function showAuctionModal(auctionId) {
@@ -625,155 +664,6 @@ $auctionsJson = json_encode($validAuctions);
             });
         }
 
-        function initMap() {
-            const defaultPos = { lat: -23.550520, lng: -46.633308 };
-
-            mapInstance = new google.maps.Map(document.getElementById("map"), {
-                zoom: 12,
-                center: defaultPos,
-                mapTypeId: "roadmap",
-                mapTypeControl: true,
-                mapTypeControlOptions: {
-                    position: google.maps.ControlPosition.TOP_LEFT
-                },
-                fullscreenControl: false,
-                streetViewControl: false,
-                gestureHandling: "greedy"
-            });
-
-            const hasClients = clients && clients.length > 0;
-            const hasAuctions = auctions && auctions.length > 0;
-
-            if (!hasClients && !hasAuctions) {
-                MapSwal.fire({
-                    icon: 'warning',
-                    title: 'Atenção',
-                    text: "Nenhum item selecionado possui coordenadas válidas para exibição no mapa."
-                });
-                return;
-            }
-
-            const bounds = new google.maps.LatLngBounds();
-
-            // Group close/identical coordinates across clients and auctions to fan out slightly
-            const coordGroups = {};
-            const allItems = [...clients, ...auctions];
-            allItems.forEach(item => {
-                const key = `${parseFloat(item.latitude).toFixed(4)},${parseFloat(item.longitude).toFixed(4)}`;
-                if (!coordGroups[key]) coordGroups[key] = [];
-                coordGroups[key].push(item);
-            });
-
-            markersList = [];
-            markerMap = {};
-            auctionMarkerMap = {};
-
-            // 1. Render Client Markers
-            clients.forEach(client => {
-                const key = `${parseFloat(client.latitude).toFixed(4)},${parseFloat(client.longitude).toFixed(4)}`;
-                const group = coordGroups[key];
-                let lat = parseFloat(client.latitude);
-                let lng = parseFloat(client.longitude);
-
-                if (group && group.length > 1) {
-                    const index = group.indexOf(client);
-                    const angle = (index / group.length) * (2 * Math.PI);
-                    const radius = 0.00035;
-                    lat += radius * Math.cos(angle);
-                    lng += (radius * 1.2) * Math.sin(angle);
-                }
-
-                const position = { lat, lng };
-
-                const marker = new google.maps.Marker({
-                    position: position,
-                    map: mapInstance,
-                    title: `${client.name}${client.farm_name ? ' (' + client.farm_name + ')' : ''}`,
-                    icon: createPinIcon(client),
-                    label: {
-                        text: client.name,
-                        color: '#1e293b',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        className: 'map-marker-label'
-                    },
-                    animation: google.maps.Animation.DROP
-                });
-
-                marker.addListener("click", () => {
-                    mapInstance.panTo(position);
-                    showClientModal(client.id);
-                });
-
-                bounds.extend(position);
-                markersList.push(marker);
-                markerMap[client.id] = { marker, position, client };
-            });
-
-            // 2. Render Auction Markers (Distinct Red Pin with Gavel)
-            auctions.forEach(auction => {
-                const key = `${parseFloat(auction.latitude).toFixed(4)},${parseFloat(auction.longitude).toFixed(4)}`;
-                const group = coordGroups[key];
-                let lat = parseFloat(auction.latitude);
-                let lng = parseFloat(auction.longitude);
-
-                if (group && group.length > 1) {
-                    const index = group.indexOf(auction);
-                    const angle = (index / group.length) * (2 * Math.PI);
-                    const radius = 0.00035;
-                    lat += radius * Math.cos(angle);
-                    lng += (radius * 1.2) * Math.sin(angle);
-                }
-
-                const position = { lat, lng };
-
-                const marker = new google.maps.Marker({
-                    position: position,
-                    map: mapInstance,
-                    title: `Leilão: ${auction.title}`,
-                    icon: createAuctionPinIcon(auction),
-                    label: {
-                        text: `🔨 ${auction.title}`,
-                        color: '#991b1b',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        className: 'map-auction-label'
-                    },
-                    zIndex: 999, // Ensure auction pins stand on top
-                    animation: google.maps.Animation.DROP
-                });
-
-                marker.addListener("click", () => {
-                    mapInstance.panTo(position);
-                    showAuctionModal(auction.id);
-                });
-
-                bounds.extend(position);
-                markersList.push(marker);
-                auctionMarkerMap[auction.id] = { marker, position, auction };
-            });
-
-            // Initialize MarkerClusterer with custom renderer
-            if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
-                clustererInstance = new markerClusterer.MarkerClusterer({
-                    map: mapInstance,
-                    markers: markersList
-                });
-            }
-
-            // Adjust map view to encompass all markers
-            mapInstance.fitBounds(bounds);
-
-            const listener = google.maps.event.addListener(mapInstance, "idle", function () {
-                if (mapInstance.getZoom() > 16) mapInstance.setZoom(16);
-                google.maps.event.removeListener(listener);
-            });
-
-            // Populate Sidebar List & Status Badges
-            renderSidebarList();
-            renderStatusChips();
-        }
-
         function getStatusKey(status) {
             const s = (status || '').toLowerCase().trim();
             if (s === 'novo' || s === 'pré-cadastro' || s === 'precadastro') return 'novo';
@@ -871,6 +761,7 @@ $auctionsJson = json_encode($validAuctions);
             }
             renderStatusChips();
             filterSidebarList();
+            applyStatusFilterToMap();
         }
 
         function renderSidebarList(filteredClients = null, filteredAuctions = null) {
@@ -987,36 +878,6 @@ $auctionsJson = json_encode($validAuctions);
             renderSidebarList(filteredClients, filteredAuctions);
         }
 
-        function focusClient(clientId) {
-            const data = markerMap[clientId];
-            if (!data) return;
-
-            mapInstance.panTo(data.position);
-            mapInstance.setZoom(15);
-
-            // On mobile, close sidebar automatically
-            if (window.innerWidth < 640) {
-                toggleSidebar(false);
-            }
-
-            showClientModal(clientId);
-        }
-
-        function focusAuction(auctionId) {
-            const data = auctionMarkerMap[auctionId];
-            if (!data) return;
-
-            mapInstance.panTo(data.position);
-            mapInstance.setZoom(15);
-
-            // On mobile, close sidebar automatically
-            if (window.innerWidth < 640) {
-                toggleSidebar(false);
-            }
-
-            showAuctionModal(auctionId);
-        }
-
         function toggleSidebar(forceState) {
             const sidebar = document.getElementById('clientSidebar');
             const overlay = document.getElementById('sidebarOverlay');
@@ -1111,13 +972,427 @@ $auctionsJson = json_encode($validAuctions);
                 }
             });
         }
-
-        // Expose initMap to global scope
-        window.initMap = initMap;
     </script>
-    <script
-        src="https://maps.googleapis.com/maps/api/js?key=<?php echo GOOGLE_MAPS_API_KEY; ?>&callback=initMap&v=weekly&loading=async"
-        async></script>
+
+    <?php if (defined('MAP_PROVIDER') && MAP_PROVIDER === 'google_maps'): ?>
+    <script>
+        function createGooglePinSvg(client) {
+            const statusInfo = getStatusInfo(client.status);
+            const isPotential = client.is_potential == 1;
+            const starSvg = isPotential ? `<circle cx="26" cy="8" r="7" fill="#f59e0b" stroke="#fff" stroke-width="1.5"/><text x="26" y="11" font-size="9" text-anchor="middle" fill="#fff">⭐</text>` : '';
+            const svg = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
+                <path d="M17 0 C9.27 0 3 6.27 3 14 C3 22.5 17 34 17 34 C17 34 31 22.5 31 14 C31 6.27 24.73 0 17 0 Z" fill="${statusInfo.color}" stroke="#ffffff" stroke-width="2"/>
+                <circle cx="17" cy="13" r="5" fill="#ffffff"/>
+                ${starSvg}
+            </svg>`;
+            return {
+                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+                scaledSize: new google.maps.Size(34, 34),
+                anchor: new google.maps.Point(17, 34)
+            };
+        }
+
+        function createGoogleAuctionPinSvg() {
+            const svg = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+                <path d="M18 0 C9.72 0 3 6.72 3 15 C3 24 18 36 18 36 C18 36 33 24 33 15 C33 6.72 26.28 0 18 0 Z" fill="#dc2626" stroke="#ffffff" stroke-width="2"/>
+                <circle cx="18" cy="14" r="5.5" fill="#ffffff"/>
+            </svg>`;
+            return {
+                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+                scaledSize: new google.maps.Size(36, 36),
+                anchor: new google.maps.Point(18, 36)
+            };
+        }
+
+        function initMap() {
+            const defaultPos = { lat: -23.550520, lng: -46.633308 };
+            mapInstance = new google.maps.Map(document.getElementById('map'), {
+                zoom: 11,
+                center: defaultPos,
+                mapTypeControl: true,
+                streetViewControl: false
+            });
+
+            const hasClients = clients && clients.length > 0;
+            const hasAuctions = auctions && auctions.length > 0;
+
+            if (!hasClients && !hasAuctions) {
+                MapSwal.fire({
+                    icon: 'warning',
+                    title: 'Atenção',
+                    text: "Nenhum item selecionado possui coordenadas válidas para exibição no mapa."
+                });
+                return;
+            }
+
+            const coordGroups = {};
+            const allItems = [...clients, ...auctions];
+            allItems.forEach(item => {
+                const key = `${parseFloat(item.latitude).toFixed(4)},${parseFloat(item.longitude).toFixed(4)}`;
+                if (!coordGroups[key]) coordGroups[key] = [];
+                coordGroups[key].push(item);
+            });
+
+            markersList = [];
+            markerMap = {};
+            auctionMarkerMap = {};
+            const bounds = new google.maps.LatLngBounds();
+
+            // 1. Clients
+            clients.forEach(client => {
+                const key = `${parseFloat(client.latitude).toFixed(4)},${parseFloat(client.longitude).toFixed(4)}`;
+                const group = coordGroups[key];
+                let lat = parseFloat(client.latitude);
+                let lng = parseFloat(client.longitude);
+
+                if (group && group.length > 1) {
+                    const index = group.indexOf(client);
+                    const angle = (index / group.length) * (2 * Math.PI);
+                    const radius = 0.00035;
+                    lat += radius * Math.cos(angle);
+                    lng += (radius * 1.2) * Math.sin(angle);
+                }
+
+                const pos = { lat, lng };
+                bounds.extend(pos);
+
+                const marker = new google.maps.Marker({
+                    position: pos,
+                    title: `${client.name}${client.farm_name ? ' (' + client.farm_name + ')' : ''}`,
+                    icon: createGooglePinSvg(client)
+                });
+
+                marker.addListener('click', () => {
+                    mapInstance.setCenter(pos);
+                    mapInstance.setZoom(15);
+                    showClientModal(client.id);
+                });
+
+                markersList.push(marker);
+                markerMap[client.id] = { marker, position: pos, client };
+            });
+
+            // 2. Auctions
+            auctions.forEach(auction => {
+                const key = `${parseFloat(auction.latitude).toFixed(4)},${parseFloat(auction.longitude).toFixed(4)}`;
+                const group = coordGroups[key];
+                let lat = parseFloat(auction.latitude);
+                let lng = parseFloat(auction.longitude);
+
+                if (group && group.length > 1) {
+                    const index = group.indexOf(auction);
+                    const angle = (index / group.length) * (2 * Math.PI);
+                    const radius = 0.00035;
+                    lat += radius * Math.cos(angle);
+                    lng += (radius * 1.2) * Math.sin(angle);
+                }
+
+                const pos = { lat, lng };
+                bounds.extend(pos);
+
+                const marker = new google.maps.Marker({
+                    position: pos,
+                    title: `Leilão: ${auction.title}`,
+                    icon: createGoogleAuctionPinSvg(),
+                    zIndex: 1000
+                });
+
+                marker.addListener('click', () => {
+                    mapInstance.setCenter(pos);
+                    mapInstance.setZoom(15);
+                    showAuctionModal(auction.id);
+                });
+
+                markersList.push(marker);
+                auctionMarkerMap[auction.id] = { marker, position: pos, auction };
+            });
+
+            if (window.markerClusterer && markerClusterer.MarkerClusterer) {
+                clustererInstance = new markerClusterer.MarkerClusterer({
+                    map: mapInstance,
+                    markers: markersList
+                });
+            } else {
+                markersList.forEach(m => m.setMap(mapInstance));
+            }
+
+            if (markersList.length > 0) {
+                if (clients.length === 1 && auctions.length === 0) {
+                    const singleClient = clients[0];
+                    mapInstance.setCenter({ lat: parseFloat(singleClient.latitude), lng: parseFloat(singleClient.longitude) });
+                    mapInstance.setZoom(15);
+                    setTimeout(() => showClientModal(singleClient.id), 250);
+                } else if (auctions.length === 1 && clients.length === 0) {
+                    const singleAuction = auctions[0];
+                    mapInstance.setCenter({ lat: parseFloat(singleAuction.latitude), lng: parseFloat(singleAuction.longitude) });
+                    mapInstance.setZoom(15);
+                    setTimeout(() => showAuctionModal(singleAuction.id), 250);
+                } else {
+                    mapInstance.fitBounds(bounds);
+                }
+            }
+
+            renderSidebarList();
+            renderStatusChips();
+        }
+        window.initMap = initMap;
+
+        function applyStatusFilterToMap() {
+            const activeMarkers = [];
+            const bounds = new google.maps.LatLngBounds();
+
+            if (currentStatusFilter !== 'auction') {
+                clients.forEach(c => {
+                    const matchStatus = !currentStatusFilter || (currentStatusFilter === 'potential' ? c.is_potential == 1 : getStatusKey(c.status) === currentStatusFilter);
+                    if (matchStatus && markerMap[c.id]) {
+                        activeMarkers.push(markerMap[c.id].marker);
+                        bounds.extend(markerMap[c.id].position);
+                    }
+                });
+            }
+
+            if (!currentStatusFilter || currentStatusFilter === 'auction') {
+                auctions.forEach(a => {
+                    if (auctionMarkerMap[a.id]) {
+                        activeMarkers.push(auctionMarkerMap[a.id].marker);
+                        bounds.extend(auctionMarkerMap[a.id].position);
+                    }
+                });
+            }
+
+            if (clustererInstance) {
+                clustererInstance.clearMarkers();
+                clustererInstance.addMarkers(activeMarkers);
+            } else {
+                markersList.forEach(m => m.setMap(null));
+                activeMarkers.forEach(m => m.setMap(mapInstance));
+            }
+
+            if (activeMarkers.length > 0) {
+                mapInstance.fitBounds(bounds);
+            }
+        }
+
+        function focusClient(clientId) {
+            const data = markerMap[clientId];
+            if (!data) return;
+
+            mapInstance.setCenter(data.position);
+            mapInstance.setZoom(15);
+
+            if (window.innerWidth < 640) {
+                toggleSidebar(false);
+            }
+
+            showClientModal(clientId);
+        }
+
+        function focusAuction(auctionId) {
+            const data = auctionMarkerMap[auctionId];
+            if (!data) return;
+
+            mapInstance.setCenter(data.position);
+            mapInstance.setZoom(15);
+
+            if (window.innerWidth < 640) {
+                toggleSidebar(false);
+            }
+
+            showAuctionModal(auctionId);
+        }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=<?php echo GOOGLE_MAPS_API_KEY; ?>&libraries=places&loading=async&callback=initMap" async defer></script>
+    <?php else: ?>
+    <script>
+        function initMap() {
+            const defaultPos = [-23.550520, -46.633308];
+
+            mapInstance = L.map('map', {
+                zoomControl: true
+            }).setView(defaultPos, 11);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(mapInstance);
+
+            const hasClients = clients && clients.length > 0;
+            const hasAuctions = auctions && auctions.length > 0;
+
+            if (!hasClients && !hasAuctions) {
+                MapSwal.fire({
+                    icon: 'warning',
+                    title: 'Atenção',
+                    text: "Nenhum item selecionado possui coordenadas válidas para exibição no mapa."
+                });
+                return;
+            }
+
+            // MarkerCluster Group
+            clusterGroup = L.markerClusterGroup({
+                showCoverageOnHover: false,
+                maxClusterRadius: 40,
+                spiderfyOnMaxZoom: true
+            });
+
+            // Group close/identical coordinates across clients and auctions to fan out slightly
+            const coordGroups = {};
+            const allItems = [...clients, ...auctions];
+            allItems.forEach(item => {
+                const key = `${parseFloat(item.latitude).toFixed(4)},${parseFloat(item.longitude).toFixed(4)}`;
+                if (!coordGroups[key]) coordGroups[key] = [];
+                coordGroups[key].push(item);
+            });
+
+            markersList = [];
+            markerMap = {};
+            auctionMarkerMap = {};
+
+            // 1. Render Client Markers
+            clients.forEach(client => {
+                const key = `${parseFloat(client.latitude).toFixed(4)},${parseFloat(client.longitude).toFixed(4)}`;
+                const group = coordGroups[key];
+                let lat = parseFloat(client.latitude);
+                let lng = parseFloat(client.longitude);
+
+                if (group && group.length > 1) {
+                    const index = group.indexOf(client);
+                    const angle = (index / group.length) * (2 * Math.PI);
+                    const radius = 0.00035;
+                    lat += radius * Math.cos(angle);
+                    lng += (radius * 1.2) * Math.sin(angle);
+                }
+
+                const marker = L.marker([lat, lng], {
+                    icon: createPinIcon(client),
+                    title: `${client.name}${client.farm_name ? ' (' + client.farm_name + ')' : ''}`
+                });
+
+                marker.on('click', () => {
+                    mapInstance.setView([lat, lng], 15);
+                    showClientModal(client.id);
+                });
+
+                markersList.push(marker);
+                markerMap[client.id] = { marker, position: [lat, lng], client };
+                clusterGroup.addLayer(marker);
+            });
+
+            // 2. Render Auction Markers (Distinct Red Pin with Gavel)
+            auctions.forEach(auction => {
+                const key = `${parseFloat(auction.latitude).toFixed(4)},${parseFloat(auction.longitude).toFixed(4)}`;
+                const group = coordGroups[key];
+                let lat = parseFloat(auction.latitude);
+                let lng = parseFloat(auction.longitude);
+
+                if (group && group.length > 1) {
+                    const index = group.indexOf(auction);
+                    const angle = (index / group.length) * (2 * Math.PI);
+                    const radius = 0.00035;
+                    lat += radius * Math.cos(angle);
+                    lng += (radius * 1.2) * Math.sin(angle);
+                }
+
+                const marker = L.marker([lat, lng], {
+                    icon: createAuctionPinIcon(auction),
+                    title: `Leilão: ${auction.title}`,
+                    zIndexOffset: 1000
+                });
+
+                marker.on('click', () => {
+                    mapInstance.setView([lat, lng], 15);
+                    showAuctionModal(auction.id);
+                });
+
+                markersList.push(marker);
+                auctionMarkerMap[auction.id] = { marker, position: [lat, lng], auction };
+                clusterGroup.addLayer(marker);
+            });
+
+            mapInstance.addLayer(clusterGroup);
+
+            // Adjust map view to encompass all markers
+            if (clusterGroup.getLayers().length > 0) {
+                if (clients.length === 1 && auctions.length === 0) {
+                    const singleClient = clients[0];
+                    mapInstance.setView([parseFloat(singleClient.latitude), parseFloat(singleClient.longitude)], 15);
+                    setTimeout(() => showClientModal(singleClient.id), 250);
+                } else if (auctions.length === 1 && clients.length === 0) {
+                    const singleAuction = auctions[0];
+                    mapInstance.setView([parseFloat(singleAuction.latitude), parseFloat(singleAuction.longitude)], 15);
+                    setTimeout(() => showAuctionModal(singleAuction.id), 250);
+                } else {
+                    mapInstance.fitBounds(clusterGroup.getBounds(), { padding: [30, 30] });
+                }
+            }
+
+            // Populate Sidebar List & Status Badges
+            renderSidebarList();
+            renderStatusChips();
+        }
+
+        function applyStatusFilterToMap() {
+            if (!clusterGroup) return;
+            clusterGroup.clearLayers();
+
+            // Filter Clients
+            if (currentStatusFilter !== 'auction') {
+                clients.forEach(c => {
+                    const matchStatus = !currentStatusFilter || (currentStatusFilter === 'potential' ? c.is_potential == 1 : getStatusKey(c.status) === currentStatusFilter);
+                    if (matchStatus && markerMap[c.id]) {
+                        clusterGroup.addLayer(markerMap[c.id].marker);
+                    }
+                });
+            }
+
+            // Filter Auctions
+            if (!currentStatusFilter || currentStatusFilter === 'auction') {
+                auctions.forEach(a => {
+                    if (auctionMarkerMap[a.id]) {
+                        clusterGroup.addLayer(auctionMarkerMap[a.id].marker);
+                    }
+                });
+            }
+
+            if (clusterGroup.getLayers().length > 0) {
+                mapInstance.fitBounds(clusterGroup.getBounds(), { padding: [30, 30] });
+            }
+        }
+
+        function focusClient(clientId) {
+            const data = markerMap[clientId];
+            if (!data) return;
+
+            mapInstance.setView(data.position, 15);
+
+            // On mobile, close sidebar automatically
+            if (window.innerWidth < 640) {
+                toggleSidebar(false);
+            }
+
+            showClientModal(clientId);
+        }
+
+        function focusAuction(auctionId) {
+            const data = auctionMarkerMap[auctionId];
+            if (!data) return;
+
+            mapInstance.setView(data.position, 15);
+
+            // On mobile, close sidebar automatically
+            if (window.innerWidth < 640) {
+                toggleSidebar(false);
+            }
+
+            showAuctionModal(auctionId);
+        }
+
+        // Initialize Map on Load
+        document.addEventListener('DOMContentLoaded', initMap);
+    </script>
+    <?php endif; ?>
 </body>
 
 </html>
