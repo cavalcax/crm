@@ -278,7 +278,6 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
                     <div>
                         <h1 class="text-2xl sm:text-3xl font-bold text-brand-900">Relatórios</h1>
-                        <p class="text-xs sm:text-sm text-gray-500 mt-0.5">Filtragem detalhada e consulta de clientes e intenções</p>
                     </div>
                     <?php if ($hasActiveFilters): ?>
                         <a href="reports.php"

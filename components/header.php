@@ -7,9 +7,6 @@
                 </path>
             </svg>
         </button>
-        <span class="text-gray-800 text-xl font-semibold ml-4 md:ml-0">
-            <?php echo isset($pageTitle) ? $pageTitle : 'Dashboard'; ?>
-        </span>
     </div>
 
     <div class="flex items-center space-x-3 sm:space-x-4">
@@ -115,8 +112,10 @@
 </header>
 
 <!-- Universal Modal de Aguarde / Loading Overlay -->
-<div id="globalLoadingOverlay" class="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-50 flex items-center justify-center transition-opacity duration-200 opacity-0 pointer-events-none">
-    <div class="bg-white px-6 py-5 rounded-2xl shadow-2xl flex items-center space-x-4 border border-gray-100 max-w-xs sm:max-w-sm">
+<div id="globalLoadingOverlay"
+    class="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-50 flex items-center justify-center transition-opacity duration-200 opacity-0 pointer-events-none">
+    <div
+        class="bg-white px-6 py-5 rounded-2xl shadow-2xl flex items-center space-x-4 border border-gray-100 max-w-xs sm:max-w-sm">
         <div class="w-8 h-8 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin flex-shrink-0"></div>
         <div>
             <p class="font-bold text-gray-800 text-sm" id="globalLoadingTitle">Carregando dados...</p>
@@ -132,7 +131,7 @@
     // ==========================================
     let globalLoadingTimeout = null;
 
-    window.showLoading = function(title = "Carregando dados...", subtitle = "Por favor, aguarde um instante", maxWaitMs = 6000) {
+    window.showLoading = function (title = "Carregando dados...", subtitle = "Por favor, aguarde um instante", maxWaitMs = 6000) {
         const overlay = document.getElementById('globalLoadingOverlay');
         if (!overlay) return;
         const titleEl = document.getElementById('globalLoadingTitle');
@@ -150,7 +149,7 @@
         }, maxWaitMs);
     };
 
-    window.hideLoading = function() {
+    window.hideLoading = function () {
         if (globalLoadingTimeout) clearTimeout(globalLoadingTimeout);
         const overlay = document.getElementById('globalLoadingOverlay');
         if (!overlay) return;
@@ -217,7 +216,7 @@
     });
 
     // Close open menus/modals on popstate without trapping history
-    window.addEventListener('popstate', function(event) {
+    window.addEventListener('popstate', function (event) {
         if (typeof Swal !== 'undefined' && Swal.isVisible()) {
             Swal.close();
         }
@@ -407,7 +406,7 @@
     window.syncPushSubscription = syncPushSubscription;
     window.getSwUrl = getSwUrl;
 
-    window.unsubscribePushSubscription = async function() {
+    window.unsubscribePushSubscription = async function () {
         try {
             if ('serviceWorker' in navigator && 'PushManager' in window) {
                 const reg = await navigator.serviceWorker.ready;

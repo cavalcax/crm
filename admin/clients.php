@@ -250,15 +250,13 @@ $precadastroUrl = $protocol . "://" . $host . "/precadastro.php?ref=" . encryptU
                 <div class="flex justify-between items-center mb-6">
                     <div>
                         <h1 class="text-2xl sm:text-3xl font-bold text-brand-900">Clientes</h1>
-                        <p class="text-xs sm:text-sm text-gray-500 mt-0.5">Gerenciamento e relacionamento com clientes.</p>
                     </div>
                     <a href="client-add.php"
-                        class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-2 sm:py-2.5 px-4 sm:px-6 rounded-lg shadow-md transition transform hover:-translate-y-0.5 active:translate-y-0 flex items-center cursor-pointer text-xs sm:text-sm">
-                        <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-1.5 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-1.5 sm:py-2 px-3 sm:px-4 rounded-xl shadow-md transition transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center cursor-pointer text-xs sm:text-sm whitespace-nowrap">
+                        <svg class="w-4 h-4 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                         </svg>
-                        Novo Cliente
+                        <span>Novo</span>
                     </a>
                 </div>
 

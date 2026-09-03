@@ -32,8 +32,8 @@ $search_filter = isset($_GET['q']) ? sanitize($_GET['q']) : '';
 
 $raw_milk_min = sanitize($_GET['milk_min'] ?? '');
 $raw_milk_max = sanitize($_GET['milk_max'] ?? '');
-$milk_min_num = (int)preg_replace('/\D/', '', $raw_milk_min);
-$milk_max_num = (int)preg_replace('/\D/', '', $raw_milk_max);
+$milk_min_num = (int) preg_replace('/\D/', '', $raw_milk_min);
+$milk_max_num = (int) preg_replace('/\D/', '', $raw_milk_max);
 
 // Build dynamic query for clients
 $query = "
@@ -234,17 +234,17 @@ foreach ($categories as $c) {
 $isMilkFilterActive = ($milk_min_num > 0 || $milk_max_num > 0);
 
 // Active filters count
-$hasActiveFilters = !empty($status_filters) || !empty($uf_filters) || !empty($breed_filters) || 
-                     !empty($animal_cat_filters) || !empty($prod_system_filters) || !empty($payment_filters) || 
-                     !empty($category_id_filters) || $potential_filter !== '' || ($type_filter !== 'all' && !empty($type_filter)) || 
-                     $producer_filter !== '' || !empty($search_filter) || $isMilkFilterActive;
+$hasActiveFilters = !empty($status_filters) || !empty($uf_filters) || !empty($breed_filters) ||
+    !empty($animal_cat_filters) || !empty($prod_system_filters) || !empty($payment_filters) ||
+    !empty($category_id_filters) || $potential_filter !== '' || ($type_filter !== 'all' && !empty($type_filter)) ||
+    $producer_filter !== '' || !empty($search_filter) || $isMilkFilterActive;
 
-$activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_filters) + 
-                     count($animal_cat_filters) + count($prod_system_filters) + count($payment_filters) + 
-                     count($category_id_filters) + ($potential_filter !== '' ? 1 : 0) + 
-                     (($type_filter !== 'all' && !empty($type_filter)) ? 1 : 0) + 
-                     ($producer_filter !== '' ? 1 : 0) + (!empty($search_filter) ? 1 : 0) +
-                     ($isMilkFilterActive ? 1 : 0);
+$activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_filters) +
+    count($animal_cat_filters) + count($prod_system_filters) + count($payment_filters) +
+    count($category_id_filters) + ($potential_filter !== '' ? 1 : 0) +
+    (($type_filter !== 'all' && !empty($type_filter)) ? 1 : 0) +
+    ($producer_filter !== '' ? 1 : 0) + (!empty($search_filter) ? 1 : 0) +
+    ($isMilkFilterActive ? 1 : 0);
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -290,13 +290,13 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
                     <div>
                         <h1 class="text-2xl sm:text-3xl font-bold text-brand-900">Mapa de Clientes e Leilões</h1>
-                        <p class="text-xs sm:text-sm text-gray-500 mt-0.5">Filtre, selecione os clientes e visualize no mapa georreferenciado</p>
                     </div>
                     <?php if ($hasActiveFilters): ?>
                         <a href="map-selector.php"
                             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-200 hover:bg-gray-300 text-gray-700 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
                             Limpar Filtros (<?php echo $activeFilterCount; ?>)
                         </a>
@@ -311,15 +311,19 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                             <span class="text-lg">🔍</span>
                             <h2 class="text-sm sm:text-base font-bold tracking-wide">Filtros de Clientes</h2>
                             <?php if ($activeFilterCount > 0): ?>
-                                <span class="bg-brand-400 text-brand-900 text-xs font-extrabold px-2.5 py-0.5 rounded-full ml-1">
+                                <span
+                                    class="bg-brand-400 text-brand-900 text-xs font-extrabold px-2.5 py-0.5 rounded-full ml-1">
                                     <?php echo $activeFilterCount; ?> ativo(s)
                                 </span>
                             <?php endif; ?>
                         </div>
                         <div class="flex items-center gap-3">
-                            <span class="hidden sm:inline text-xs text-brand-100 font-medium">Clique para expandir/recolher filtros</span>
-                            <svg id="filterChevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            <span class="hidden sm:inline text-xs text-brand-100 font-medium">Clique para
+                                expandir/recolher filtros</span>
+                            <svg id="filterChevron" class="w-5 h-5 transform transition-transform duration-200"
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 9l-7 7-7-7"></path>
                             </svg>
                         </div>
                     </button>
@@ -330,15 +334,19 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                 <!-- 1. Busca Geral (Ocupa 2 colunas / 50% da largura) -->
                                 <div class="sm:col-span-2 lg:col-span-2">
-                                    <label class="block text-xs font-bold text-gray-700 mb-1">Busca Geral (Nome, Fazenda, Telefone, Cidade...)</label>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1">Busca Geral (Nome,
+                                        Fazenda, Telefone, Cidade...)</label>
                                     <div class="relative">
-                                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <span
+                                            class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor"
+                                                viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                             </svg>
                                         </span>
-                                        <input type="text" name="q" value="<?php echo htmlspecialchars($search_filter); ?>"
+                                        <input type="text" name="q"
+                                            value="<?php echo htmlspecialchars($search_filter); ?>"
                                             class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm"
                                             placeholder="Ex: João, Fazenda Boa Vista, (19) 99999-9999, Campinas...">
                                     </div>
@@ -349,11 +357,15 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
 
                                 <!-- 3. Cliente em Potencial (Single select) -->
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-700 mb-1">Cliente em Potencial</label>
-                                    <select name="is_potential" class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                                    <label class="block text-xs font-bold text-gray-700 mb-1">Cliente em
+                                        Potencial</label>
+                                    <select name="is_potential"
+                                        class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
                                         <option value="">Todos</option>
-                                        <option value="1" <?php echo $potential_filter === '1' ? 'selected' : ''; ?>>⭐ Somente em Potencial</option>
-                                        <option value="0" <?php echo $potential_filter === '0' ? 'selected' : ''; ?>>Outros</option>
+                                        <option value="1" <?php echo $potential_filter === '1' ? 'selected' : ''; ?>>⭐
+                                            Somente em Potencial</option>
+                                        <option value="0" <?php echo $potential_filter === '0' ? 'selected' : ''; ?>>
+                                            Outros</option>
                                     </select>
                                 </div>
 
@@ -375,22 +387,27 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                 <!-- 9. Produtor de Leite (Single select) -->
                                 <div>
                                     <label class="block text-xs font-bold text-gray-700 mb-1">Produtor de Leite?</label>
-                                    <select name="producer" class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                                    <select name="producer"
+                                        class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
                                         <option value="">Todos</option>
-                                        <option value="Sim" <?php echo $producer_filter === 'Sim' ? 'selected' : ''; ?>>Sim</option>
-                                        <option value="Não" <?php echo $producer_filter === 'Não' ? 'selected' : ''; ?>>Não</option>
+                                        <option value="Sim" <?php echo $producer_filter === 'Sim' ? 'selected' : ''; ?>>
+                                            Sim</option>
+                                        <option value="Não" <?php echo $producer_filter === 'Não' ? 'selected' : ''; ?>>
+                                            Não</option>
                                     </select>
                                 </div>
 
                                 <!-- 10. Leite Mensal Inicial (L/mês) -->
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-700 mb-1">Leite Mensal Inicial</label>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1">Leite Mensal
+                                        Inicial</label>
                                     <div class="relative">
                                         <input type="text" inputmode="numeric" name="milk_min" id="milkMinInput"
                                             value="<?php echo htmlspecialchars(!empty($raw_milk_min) && $raw_milk_min !== '0.000' ? $raw_milk_min : ''); ?>"
                                             placeholder="0.000"
                                             class="w-full border border-gray-300 p-2 pr-16 rounded-lg text-xs sm:text-sm shadow-sm bg-white font-semibold text-gray-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 milk-range-mask">
-                                        <span class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-[10px] font-bold text-gray-400 uppercase">
+                                        <span
+                                            class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-[10px] font-bold text-gray-400 uppercase">
                                             L/mês
                                         </span>
                                     </div>
@@ -404,7 +421,8 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                             value="<?php echo htmlspecialchars(!empty($raw_milk_max) && $raw_milk_max !== '0.000' ? $raw_milk_max : ''); ?>"
                                             placeholder="0.000"
                                             class="w-full border border-gray-300 p-2 pr-16 rounded-lg text-xs sm:text-sm shadow-sm bg-white font-semibold text-gray-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 milk-range-mask">
-                                        <span class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-[10px] font-bold text-gray-400 uppercase">
+                                        <span
+                                            class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-[10px] font-bold text-gray-400 uppercase">
                                             L/mês
                                         </span>
                                     </div>
@@ -416,10 +434,14 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                 <!-- 13. Tipo de Intenção (Single select) -->
                                 <div>
                                     <label class="block text-xs font-bold text-gray-700 mb-1">Tipo de Intenção</label>
-                                    <select name="type" class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-                                        <option value="all" <?php echo $type_filter == 'all' ? 'selected' : ''; ?>>Todos</option>
-                                        <option value="buy" <?php echo $type_filter == 'buy' ? 'selected' : ''; ?>>🛒 Compra</option>
-                                        <option value="sell" <?php echo $type_filter == 'sell' ? 'selected' : ''; ?>>💰 Venda</option>
+                                    <select name="type"
+                                        class="w-full border border-gray-300 p-2 rounded-lg text-xs sm:text-sm shadow-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                                        <option value="all" <?php echo $type_filter == 'all' ? 'selected' : ''; ?>>Todos
+                                        </option>
+                                        <option value="buy" <?php echo $type_filter == 'buy' ? 'selected' : ''; ?>>🛒
+                                            Compra</option>
+                                        <option value="sell" <?php echo $type_filter == 'sell' ? 'selected' : ''; ?>>💰
+                                            Venda</option>
                                     </select>
                                 </div>
 
@@ -428,7 +450,9 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                     <button type="submit"
                                         class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold py-2 px-5 rounded-lg shadow-md transition transform hover:-translate-y-0.5 active:translate-y-0 text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer h-[38px]">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z">
+                                            </path>
                                         </svg>
                                         Aplicar Filtros
                                     </button>
@@ -454,15 +478,20 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                 class="w-full bg-gradient-to-r from-red-700 to-red-800 px-5 py-3.5 flex items-center justify-between text-white hover:from-red-800 hover:to-red-900 transition text-left cursor-pointer select-none">
                                 <div class="flex items-center gap-2">
                                     <span class="text-lg">🔨</span>
-                                    <h2 class="text-sm sm:text-base font-bold tracking-wide">Leilões Programados (Futuros com Localização)</h2>
-                                    <span class="bg-white/20 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full ml-1">
+                                    <h2 class="text-sm sm:text-base font-bold tracking-wide">Leilões Programados (Futuros
+                                        com Localização)</h2>
+                                    <span
+                                        class="bg-white/20 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full ml-1">
                                         <?php echo count($auctions); ?>
                                     </span>
                                 </div>
                                 <div class="flex items-center gap-3">
-                                    <span class="hidden sm:inline text-xs text-red-100 font-medium">Marcados com pin vermelho no mapa</span>
-                                    <svg id="auctionsChevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    <span class="hidden sm:inline text-xs text-red-100 font-medium">Marcados com pin
+                                        vermelho no mapa</span>
+                                    <svg id="auctionsChevron" class="w-5 h-5 transform transition-transform duration-200"
+                                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 9l-7 7-7-7"></path>
                                     </svg>
                                 </div>
                             </button>
@@ -476,37 +505,49 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                                     class="form-checkbox h-5 w-5 text-red-600 rounded focus:ring-red-500 border-gray-300 cursor-pointer"
                                                     title="Selecionar todos os leilões com coordenadas">
                                             </th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Título do Leilão</th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Data / Hora</th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Cidade / UF</th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Cliente Vinculado</th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Mapa</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                                Título do Leilão</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Data
+                                                / Hora</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                                Cidade / UF</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                                Cliente Vinculado</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Mapa
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100">
-                                        <?php foreach ($auctions as $auc): 
+                                        <?php foreach ($auctions as $auc):
                                             $aucDate = new DateTime($auc['start_time']);
                                             $aucLoc = array_filter([$auc['city'] ?? '', $auc['uf'] ?? '']);
-                                        ?>
+                                            ?>
                                             <tr class="hover:bg-red-50/30 transition">
                                                 <td class="px-5 py-4 text-center">
-                                                    <input type="checkbox" name="selected_auctions[]" value="<?php echo $auc['id']; ?>"
+                                                    <input type="checkbox" name="selected_auctions[]"
+                                                        value="<?php echo $auc['id']; ?>"
                                                         class="auction-checkbox form-checkbox h-5 w-5 text-red-600 rounded focus:ring-red-500 border-gray-300 cursor-pointer">
                                                 </td>
                                                 <td class="px-5 py-4 text-sm">
-                                                    <p class="font-bold text-gray-900"><?php echo htmlspecialchars($auc['title']); ?></p>
+                                                    <p class="font-bold text-gray-900">
+                                                        <?php echo htmlspecialchars($auc['title']); ?>
+                                                    </p>
                                                     <?php if (!empty($auc['operator_name'])): ?>
-                                                        <span class="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium border border-amber-200 inline-block mt-0.5">
+                                                        <span
+                                                            class="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium border border-amber-200 inline-block mt-0.5">
                                                             👤 <?php echo htmlspecialchars($auc['operator_name']); ?>
                                                         </span>
                                                     <?php endif; ?>
                                                     <?php if (!empty($auc['address'])): ?>
-                                                        <p class="text-xs text-gray-500 mt-0.5"><?php echo htmlspecialchars($auc['address']); ?></p>
+                                                        <p class="text-xs text-gray-500 mt-0.5">
+                                                            <?php echo htmlspecialchars($auc['address']); ?>
+                                                        </p>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td class="px-5 py-4 text-sm text-gray-700 font-semibold whitespace-nowrap">
                                                     📅 <?php echo $aucDate->format('d/m/Y'); ?><br>
-                                                    <span class="text-xs text-gray-500 font-normal">⏰ <?php echo $aucDate->format('H:i'); ?></span>
+                                                    <span class="text-xs text-gray-500 font-normal">⏰
+                                                        <?php echo $aucDate->format('H:i'); ?></span>
                                                 </td>
                                                 <td class="px-5 py-4 text-sm text-gray-700">
                                                     <?php echo htmlspecialchars(!empty($aucLoc) ? implode(' / ', $aucLoc) : '-'); ?>
@@ -518,9 +559,12 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                                     <a href="view-map.php?auction_id=<?php echo $auc['id']; ?>"
                                                         class="text-emerald-600 hover:text-emerald-800 p-1 hover:bg-emerald-50 rounded transition inline-flex items-center"
                                                         title="Ver no Mapa">
-                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7">
+                                                            </path>
                                                         </svg>
                                                     </a>
                                                 </td>
@@ -539,24 +583,31 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                             <div class="flex items-center gap-2">
                                 <span class="text-lg">👥</span>
                                 <h2 class="text-sm sm:text-base font-bold tracking-wide">Clientes Encontrados</h2>
-                                <span class="bg-white/20 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full ml-1" id="clientCountBadge">
+                                <span
+                                    class="bg-white/20 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full ml-1"
+                                    id="clientCountBadge">
                                     <?php echo count($clients); ?>
                                 </span>
                             </div>
                             <div class="flex items-center gap-3">
-                                <span class="hidden sm:inline text-xs text-brand-100 font-medium">Marque os clientes para exibir no mapa</span>
-                                <svg id="clientsChevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                <span class="hidden sm:inline text-xs text-brand-100 font-medium">Marque os clientes
+                                    para exibir no mapa</span>
+                                <svg id="clientsChevron" class="w-5 h-5 transform transition-transform duration-200"
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7"></path>
                                 </svg>
                             </div>
                         </button>
 
                         <div id="clientsAccordionContent" class="p-5">
                             <!-- Instant Filter Bar for loaded table rows -->
-                            <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            <div
+                                class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
                                 <div class="relative w-full sm:w-80">
                                     <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                         </svg>
@@ -567,8 +618,10 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                 </div>
                                 <div class="flex items-center gap-2 text-xs font-semibold text-gray-600">
                                     <span>Legenda:</span>
-                                    <span class="inline-flex items-center gap-1 text-amber-600 font-medium">⚠️ Sem coordenadas</span>
-                                    <span class="inline-flex items-center gap-1 text-amber-500 font-medium">⭐ Potencial</span>
+                                    <span class="inline-flex items-center gap-1 text-amber-600 font-medium">⚠️ Sem
+                                        coordenadas</span>
+                                    <span class="inline-flex items-center gap-1 text-amber-500 font-medium">⭐
+                                        Potencial</span>
                                 </div>
                             </div>
 
@@ -581,182 +634,216 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                                     class="form-checkbox h-5 w-5 text-brand-600 rounded focus:ring-brand-500 border-gray-300 cursor-pointer"
                                                     title="Selecionar todos os clientes visíveis com coordenadas">
                                             </th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Cliente</th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Cidade / UF</th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Status</th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Perfil & Raças</th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Categorias & Produção</th>
-                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Mapa</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                                Cliente</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                                Cidade / UF</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                                Status</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                                Perfil & Raças</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                                Categorias & Produção</th>
+                                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                                Mapa</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100">
-                                    <?php if (count($clients) > 0): ?>
-                                        <?php foreach ($clients as $client): ?>
-                                            <?php
-                                            $hasCoords = !empty($client['latitude']) && !empty($client['longitude']);
-                                            $isPotential = !empty($client['is_potential']) && $client['is_potential'] == 1;
-                                            ?>
-                                            <tr class="client-row hover:bg-brand-50/30 transition <?php echo !$hasCoords ? 'bg-gray-50/70 opacity-75' : ''; ?>">
-                                                <!-- Checkbox Column -->
-                                                <td class="px-5 py-4 text-center">
-                                                    <input type="checkbox" name="client_ids[]"
-                                                        value="<?php echo $client['id']; ?>"
-                                                        class="client-checkbox form-checkbox h-5 w-5 text-brand-600 rounded focus:ring-brand-500 border-gray-300 cursor-pointer"
-                                                        <?php echo !$hasCoords ? 'disabled title="Cliente sem coordenadas para o mapa"' : ''; ?>>
-                                                </td>
+                                        <?php if (count($clients) > 0): ?>
+                                            <?php foreach ($clients as $client): ?>
+                                                <?php
+                                                $hasCoords = !empty($client['latitude']) && !empty($client['longitude']);
+                                                $isPotential = !empty($client['is_potential']) && $client['is_potential'] == 1;
+                                                ?>
+                                                <tr
+                                                    class="client-row hover:bg-brand-50/30 transition <?php echo !$hasCoords ? 'bg-gray-50/70 opacity-75' : ''; ?>">
+                                                    <!-- Checkbox Column -->
+                                                    <td class="px-5 py-4 text-center">
+                                                        <input type="checkbox" name="client_ids[]"
+                                                            value="<?php echo $client['id']; ?>"
+                                                            class="client-checkbox form-checkbox h-5 w-5 text-brand-600 rounded focus:ring-brand-500 border-gray-300 cursor-pointer"
+                                                            <?php echo !$hasCoords ? 'disabled title="Cliente sem coordenadas para o mapa"' : ''; ?>>
+                                                    </td>
 
-                                                <!-- Nome Column with Star and Farm -->
-                                                <td class="px-5 py-4 text-sm">
-                                                    <div class="flex items-start">
-                                                        <!-- Potential Star Toggle Button -->
-                                                        <button type="submit" form="potentialForm_<?php echo $client['id']; ?>"
-                                                            class="mr-2 text-lg focus:outline-none transition transform hover:scale-125 cursor-pointer mt-0.5"
-                                                            title="<?php echo $isPotential ? 'Remover dos clientes em potencial' : 'Marcar como cliente em potencial'; ?>">
-                                                            <?php if ($isPotential): ?>
-                                                                <span class="text-amber-500">⭐</span>
-                                                            <?php else: ?>
-                                                                <span class="text-gray-300 hover:text-amber-400 grayscale opacity-40 hover:opacity-100">⭐</span>
-                                                            <?php endif; ?>
-                                                        </button>
+                                                    <!-- Nome Column with Star and Farm -->
+                                                    <td class="px-5 py-4 text-sm">
+                                                        <div class="flex items-start">
+                                                            <!-- Potential Star Toggle Button -->
+                                                            <button type="submit"
+                                                                form="potentialForm_<?php echo $client['id']; ?>"
+                                                                class="mr-2 text-lg focus:outline-none transition transform hover:scale-125 cursor-pointer mt-0.5"
+                                                                title="<?php echo $isPotential ? 'Remover dos clientes em potencial' : 'Marcar como cliente em potencial'; ?>">
+                                                                <?php if ($isPotential): ?>
+                                                                    <span class="text-amber-500">⭐</span>
+                                                                <?php else: ?>
+                                                                    <span
+                                                                        class="text-gray-300 hover:text-amber-400 grayscale opacity-40 hover:opacity-100">⭐</span>
+                                                                <?php endif; ?>
+                                                            </button>
 
-                                                        <div>
-                                                            <div class="flex items-center gap-1.5 flex-wrap">
-                                                                <a href="client-details.php?id=<?php echo $client['id']; ?>" target="_blank"
-                                                                   class="text-gray-900 font-bold hover:text-brand-600 hover:underline client-name">
-                                                                    <?php echo htmlspecialchars($client['name']); ?>
-                                                                </a>
-                                                                <?php if ((int)($client['user_id'] ?? 0) !== (int)$user_id): ?>
-                                                                    <span class="inline-flex items-center justify-center text-red-500 hover:text-red-700 transition shrink-0 select-none" title="Cliente de outro usuário (Responsável: <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Usuário'); ?>)">
-                                                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                                                                            <circle cx="9" cy="7" r="4"></circle>
-                                                                            <line x1="3" y1="3" x2="21" y2="21" stroke-width="2.5"></line>
+                                                            <div>
+                                                                <div class="flex items-center gap-1.5 flex-wrap">
+                                                                    <a href="client-details.php?id=<?php echo $client['id']; ?>"
+                                                                        target="_blank"
+                                                                        class="text-gray-900 font-bold hover:text-brand-600 hover:underline client-name">
+                                                                        <?php echo htmlspecialchars($client['name']); ?>
+                                                                    </a>
+                                                                    <?php if ((int) ($client['user_id'] ?? 0) !== (int) $user_id): ?>
+                                                                        <span
+                                                                            class="inline-flex items-center justify-center text-red-500 hover:text-red-700 transition shrink-0 select-none"
+                                                                            title="Cliente de outro usuário (Responsável: <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Usuário'); ?>)">
+                                                                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none"
+                                                                                stroke="currentColor" stroke-width="2"
+                                                                                stroke-linecap="round" stroke-linejoin="round">
+                                                                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2">
+                                                                                </path>
+                                                                                <circle cx="9" cy="7" r="4"></circle>
+                                                                                <line x1="3" y1="3" x2="21" y2="21"
+                                                                                    stroke-width="2.5"></line>
+                                                                            </svg>
+                                                                        </span>
+                                                                    <?php endif; ?>
+                                                                </div>
+                                                                <?php if (!empty($client['farm_name'])): ?>
+                                                                    <p
+                                                                        class="text-xs text-brand-900 font-medium client-farm mt-0.5">
+                                                                        🏡 <?php echo htmlspecialchars($client['farm_name']); ?>
+                                                                    </p>
+                                                                <?php endif; ?>
+                                                                <?php if (!$hasCoords): ?>
+                                                                    <span
+                                                                        class="text-[11px] text-amber-600 block mt-0.5 font-medium">⚠️
+                                                                        Sem coordenadas no cadastro</span>
+                                                                <?php endif; ?>
+                                                                <?php if (!empty($client['phone'])): ?>
+                                                                    <a href="https://wa.me/+55<?php echo preg_replace('/[^0-9]/', '', $client['phone']); ?>"
+                                                                        target="_blank"
+                                                                        class="text-green-600 hover:text-green-800 font-semibold hover:underline inline-flex items-center client-phone mt-1 text-xs"
+                                                                        title="Abrir conversa no WhatsApp">
+                                                                        <svg class="w-3.5 h-3.5 mr-1 fill-current text-green-500 flex-shrink-0"
+                                                                            viewBox="0 0 24 24">
+                                                                            <path
+                                                                                d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
                                                                         </svg>
-                                                                    </span>
+                                                                        <span><?php echo htmlspecialchars(formatPhone($client['phone'])); ?></span>
+                                                                    </a>
                                                                 <?php endif; ?>
                                                             </div>
-                                                            <?php if (!empty($client['farm_name'])): ?>
-                                                                <p class="text-xs text-brand-900 font-medium client-farm mt-0.5">
-                                                                    🏡 <?php echo htmlspecialchars($client['farm_name']); ?>
-                                                                </p>
-                                                            <?php endif; ?>
-                                                            <?php if (!$hasCoords): ?>
-                                                                <span class="text-[11px] text-amber-600 block mt-0.5 font-medium">⚠️ Sem coordenadas no cadastro</span>
-                                                            <?php endif; ?>
-                                                            <?php if (!empty($client['phone'])): ?>
-                                                                <a href="https://wa.me/+55<?php echo preg_replace('/[^0-9]/', '', $client['phone']); ?>"
-                                                                    target="_blank"
-                                                                    class="text-green-600 hover:text-green-800 font-semibold hover:underline inline-flex items-center client-phone mt-1 text-xs"
-                                                                    title="Abrir conversa no WhatsApp">
-                                                                    <svg class="w-3.5 h-3.5 mr-1 fill-current text-green-500 flex-shrink-0"
-                                                                        viewBox="0 0 24 24">
-                                                                        <path
-                                                                            d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
-                                                                    </svg>
-                                                                    <span><?php echo htmlspecialchars(formatPhone($client['phone'])); ?></span>
-                                                                </a>
-                                                            <?php endif; ?>
                                                         </div>
-                                                    </div>
-                                                </td>
+                                                    </td>
 
-                                                <!-- Cidade / UF Column -->
-                                                <td class="px-5 py-4 text-sm whitespace-nowrap">
-                                                    <span class="client-location text-gray-700 font-medium">
-                                                        <?php
-                                                        $loc = array_filter([$client['city'] ?? '', $client['uf'] ?? '']);
-                                                        echo htmlspecialchars(!empty($loc) ? implode(' / ', $loc) : 'N/A');
-                                                        ?>
-                                                    </span>
-                                                </td>
+                                                    <!-- Cidade / UF Column -->
+                                                    <td class="px-5 py-4 text-sm whitespace-nowrap">
+                                                        <span class="client-location text-gray-700 font-medium">
+                                                            <?php
+                                                            $loc = array_filter([$client['city'] ?? '', $client['uf'] ?? '']);
+                                                            echo htmlspecialchars(!empty($loc) ? implode(' / ', $loc) : 'N/A');
+                                                            ?>
+                                                        </span>
+                                                    </td>
 
-                                                <!-- Status Column -->
-                                                <td class="px-5 py-4 text-sm whitespace-nowrap">
-                                                    <span class="client-status">
-                                                        <?php if (($client['status'] ?? '') === 'Embral'): ?>
-                                                            <span class="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full font-bold border border-blue-300 inline-block">
-                                                                Embral
-                                                            </span>
-                                                        <?php elseif (($client['status'] ?? '') === 'Atendido'): ?>
-                                                            <span class="bg-purple-100 text-purple-800 text-xs px-2.5 py-1 rounded-full font-bold border border-purple-300 inline-block">
-                                                                Atendido
-                                                            </span>
-                                                        <?php elseif (($client['status'] ?? '') === 'Inativo'): ?>
-                                                            <span class="bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full font-bold border border-gray-300 inline-block">
-                                                                Inativo
-                                                            </span>
-                                                        <?php elseif (in_array($client['status'] ?? '', ['Novo', 'Pré-cadastro'])): ?>
-                                                            <span class="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-bold border border-amber-300 inline-block">
-                                                                Novo
-                                                            </span>
+                                                    <!-- Status Column -->
+                                                    <td class="px-5 py-4 text-sm whitespace-nowrap">
+                                                        <span class="client-status">
+                                                            <?php if (($client['status'] ?? '') === 'Embral'): ?>
+                                                                <span
+                                                                    class="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full font-bold border border-blue-300 inline-block">
+                                                                    Embral
+                                                                </span>
+                                                            <?php elseif (($client['status'] ?? '') === 'Atendido'): ?>
+                                                                <span
+                                                                    class="bg-purple-100 text-purple-800 text-xs px-2.5 py-1 rounded-full font-bold border border-purple-300 inline-block">
+                                                                    Atendido
+                                                                </span>
+                                                            <?php elseif (($client['status'] ?? '') === 'Inativo'): ?>
+                                                                <span
+                                                                    class="bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full font-bold border border-gray-300 inline-block">
+                                                                    Inativo
+                                                                </span>
+                                                            <?php elseif (in_array($client['status'] ?? '', ['Novo', 'Pré-cadastro'])): ?>
+                                                                <span
+                                                                    class="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-bold border border-amber-300 inline-block">
+                                                                    Novo
+                                                                </span>
+                                                            <?php else: ?>
+                                                                <span
+                                                                    class="bg-green-100 text-green-800 text-xs px-2.5 py-1 rounded-full font-bold border border-green-300 inline-block">
+                                                                    Ativo
+                                                                </span>
+                                                            <?php endif; ?>
+                                                        </span>
+                                                    </td>
+
+                                                    <!-- Perfil & Raças -->
+                                                    <td class="px-5 py-4 text-sm">
+                                                        <div class="font-semibold text-gray-800 text-xs">
+                                                            🐄
+                                                            <?php echo htmlspecialchars($client['breed_interests'] ?: 'Sem raças'); ?>
+                                                        </div>
+                                                        <div class="text-gray-500 text-xs mt-1">
+                                                            💳
+                                                            <?php echo htmlspecialchars($client['payment_condition'] ?: '-'); ?>
+                                                        </div>
+                                                    </td>
+
+                                                    <!-- Categorias & Sistema de Produção -->
+                                                    <td class="px-5 py-4 text-sm max-w-xs">
+                                                        <?php if (!empty($client['animal_categories'])): ?>
+                                                            <div class="text-xs text-gray-800">
+                                                                <span
+                                                                    class="font-bold text-brand-800 text-[11px] block">Categorias:</span>
+                                                                <?php echo htmlspecialchars($client['animal_categories']); ?>
+                                                            </div>
                                                         <?php else: ?>
-                                                            <span class="bg-green-100 text-green-800 text-xs px-2.5 py-1 rounded-full font-bold border border-green-300 inline-block">
-                                                                Ativo
-                                                            </span>
+                                                            <span class="text-gray-400 text-xs block">Sem categorias</span>
                                                         <?php endif; ?>
-                                                    </span>
-                                                </td>
 
-                                                <!-- Perfil & Raças -->
-                                                <td class="px-5 py-4 text-sm">
-                                                    <div class="font-semibold text-gray-800 text-xs">
-                                                        🐄 <?php echo htmlspecialchars($client['breed_interests'] ?: 'Sem raças'); ?>
-                                                    </div>
-                                                    <div class="text-gray-500 text-xs mt-1">
-                                                        💳 <?php echo htmlspecialchars($client['payment_condition'] ?: '-'); ?>
-                                                    </div>
-                                                </td>
+                                                        <?php if (!empty($client['production_system'])): ?>
+                                                            <div class="text-xs text-gray-600 mt-1">
+                                                                <span class="font-bold text-gray-700 text-[11px]">Sistema:</span>
+                                                                <?php echo htmlspecialchars($client['production_system']); ?>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                    </td>
 
-                                                <!-- Categorias & Sistema de Produção -->
-                                                <td class="px-5 py-4 text-sm max-w-xs">
-                                                    <?php if (!empty($client['animal_categories'])): ?>
-                                                        <div class="text-xs text-gray-800">
-                                                            <span class="font-bold text-brand-800 text-[11px] block">Categorias:</span>
-                                                            <?php echo htmlspecialchars($client['animal_categories']); ?>
-                                                        </div>
-                                                    <?php else: ?>
-                                                        <span class="text-gray-400 text-xs block">Sem categorias</span>
-                                                    <?php endif; ?>
-
-                                                    <?php if (!empty($client['production_system'])): ?>
-                                                        <div class="text-xs text-gray-600 mt-1">
-                                                            <span class="font-bold text-gray-700 text-[11px]">Sistema:</span>
-                                                            <?php echo htmlspecialchars($client['production_system']); ?>
-                                                        </div>
-                                                    <?php endif; ?>
-                                                </td>
-
-                                                <!-- Mapa Column -->
-                                                <td class="px-5 py-4 text-sm whitespace-nowrap text-center">
-                                                    <?php if ($hasCoords): ?>
-                                                        <a href="view-map.php?client_id=<?php echo $client['id']; ?>"
-                                                            class="text-emerald-600 hover:text-emerald-800 p-1 hover:bg-emerald-50 rounded transition inline-flex items-center"
-                                                            title="Ver no Mapa de Clientes">
-                                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                    d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
-                                                            </svg>
-                                                        </a>
-                                                    <?php else: ?>
-                                                        <span class="text-gray-400 text-xs">-</span>
-                                                    <?php endif; ?>
+                                                    <!-- Mapa Column -->
+                                                    <td class="px-5 py-4 text-sm whitespace-nowrap text-center">
+                                                        <?php if ($hasCoords): ?>
+                                                            <a href="view-map.php?client_id=<?php echo $client['id']; ?>"
+                                                                class="text-emerald-600 hover:text-emerald-800 p-1 hover:bg-emerald-50 rounded transition inline-flex items-center"
+                                                                title="Ver no Mapa de Clientes">
+                                                                <svg class="w-5 h-5" fill="none" stroke="currentColor"
+                                                                    viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                                        stroke-width="2"
+                                                                        d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7">
+                                                                    </path>
+                                                                </svg>
+                                                            </a>
+                                                        <?php else: ?>
+                                                            <span class="text-gray-400 text-xs">-</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <tr>
+                                                <td colspan="7"
+                                                    class="px-5 py-10 text-sm text-center text-gray-500 bg-white">
+                                                    Nenhum cliente encontrado para os filtros selecionados.
                                                 </td>
                                             </tr>
-                                        <?php endforeach; ?>
-                                    <?php else: ?>
-                                        <tr>
-                                            <td colspan="7" class="px-5 py-10 text-sm text-center text-gray-500 bg-white">
-                                                Nenhum cliente encontrado para os filtros selecionados.
-                                            </td>
-                                        </tr>
-                                    <?php endif; ?>
+                                        <?php endif; ?>
                                     </tbody>
                                 </table>
                             </div>
 
                             <div id="noResults" class="hidden px-5 py-8 bg-white text-sm text-center text-gray-500">
-                                <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
+                                    </path>
                                 </svg>
                                 <p class="font-medium text-gray-600">Nenhum cliente visível com os termos digitados.</p>
                             </div>
@@ -764,8 +851,10 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                     </div>
 
                     <!-- Fixed Footer Action -->
-                    <div class="fixed bottom-0 right-0 left-0 md:left-64 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex justify-between items-center z-10">
-                        <span class="text-gray-700 font-semibold text-sm" id="selectionCount">0 itens selecionados</span>
+                    <div
+                        class="fixed bottom-0 right-0 left-0 md:left-64 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex justify-between items-center z-10">
+                        <span class="text-gray-700 font-semibold text-sm" id="selectionCount">0 itens
+                            selecionados</span>
                         <button type="submit"
                             class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-md transition transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm flex items-center cursor-pointer"
                             id="generateBtn" disabled>
