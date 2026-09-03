@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch Events (Admin sees all, Operator sees own)
+// Fetch Events (Admin sees all, Operator sees own events + all auction events)
 if ($isAdmin) {
     $stmt = $pdo->prepare("
         SELECT s.*, c.name as client_name, u.name as operator_name 
@@ -41,7 +41,7 @@ if ($isAdmin) {
         FROM " . TABLE_NAME . "schedule s 
         LEFT JOIN " . TABLE_NAME . "clients c ON s.client_id = c.id 
         LEFT JOIN " . TABLE_NAME . "users u ON s.user_id = u.id 
-        WHERE s.user_id = ? 
+        WHERE (s.user_id = ? OR s.type = 'auction')
         ORDER BY s.start_time ASC
     ");
     $stmt->execute([$user_id]);
@@ -103,7 +103,7 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
         <?php include '../components/sidebar.php'; ?>
         <div class="flex-1 flex flex-col min-h-screen overflow-hidden">
             <?php include '../components/header.php'; ?>
-            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-brand-50 p-6">
+            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-brand-50 p-3 sm:p-6">
 
                 <div class="flex justify-between items-center mb-6">
                     <h1 class="text-3xl font-bold text-brand-900">Agenda</h1>
@@ -179,118 +179,99 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
         $monthShort = $monthsPt[$date->format('n')] ?? $date->format('M');
 
         $locParts = array_filter([$event['city'] ?? '', $event['uf'] ?? '']);
-        $locStr = !empty($locParts) ? implode(' / ', $locParts) : '';
+        $displayLoc = !empty($locParts) ? implode(' / ', $locParts) : '';
+        if (empty($displayLoc) && !empty($event['address'])) {
+            $displayLoc = trim(explode(',', $event['address'])[0]);
+        }
+
+        $hasCoords = (!empty($event['latitude']) && !empty($event['longitude']) && floatval($event['latitude']) != 0 && floatval($event['longitude']) != 0);
+        $mapUrl = '';
+        if ($hasCoords) {
+            $mapUrl = "view-map.php?event_id=" . $event['id'];
+        } elseif (!empty($event['client_id'])) {
+            $mapUrl = "view-map.php?client_id=" . $event['client_id'];
+        } elseif (!empty($event['address']) || !empty($displayLoc)) {
+            $mapQuery = !empty($event['address']) ? $event['address'] : $displayLoc;
+            $mapUrl = "https://www.google.com/maps/search/?api=1&query=" . urlencode($mapQuery);
+        }
 ?>
-                    <div id="event-<?php echo $event['id']; ?>" class="flex items-start <?php echo $isPast ? 'opacity-60' : ''; ?> event-row group transition duration-300 rounded-2xl p-1" data-id="<?php echo $event['id']; ?>" data-date="<?php echo $eventDateStr; ?>">
-                        <div class="flex flex-col items-center mr-4 w-16">
-                            <div class="text-sm font-bold text-gray-500 uppercase tracking-wide">
+                    <div id="event-<?php echo $event['id']; ?>" class="flex items-start <?php echo $isPast ? 'opacity-60' : ''; ?> event-row group transition duration-300 rounded-2xl p-0.5 sm:p-1" data-id="<?php echo $event['id']; ?>" data-date="<?php echo $eventDateStr; ?>">
+                        <div class="flex flex-col items-center mr-2 sm:mr-4 w-11 sm:w-16 flex-shrink-0 text-center select-none pt-0.5">
+                            <div class="text-[11px] sm:text-xs font-bold text-gray-500 uppercase tracking-wide">
                                 <?php echo $monthShort; ?>
                             </div>
-                            <div class="text-2xl font-bold text-gray-800">
+                            <div class="text-xl sm:text-2xl font-bold text-gray-800 leading-none my-0.5">
                                 <?php echo $date->format('d'); ?>
                             </div>
-                            <div class="text-xs text-gray-500 font-semibold">
+                            <div class="text-[11px] sm:text-xs text-gray-500 font-semibold">
                                 <?php echo $date->format('H:i'); ?>
                             </div>
                         </div>
+                        <?php $canEdit = $isAdmin || ($event['user_id'] == $user_id); ?>
                         <div
-                            class="flex-1 bg-white rounded-xl shadow-md p-4 border-l-4 <?php echo explode(' ', $typeClass)[0]; ?> hover:shadow-lg transition">
-                            <div class="flex justify-between items-start gap-3">
-                                <div>
-                                    <h3 class="text-lg font-bold text-gray-900 event-title">
-                                        <?php echo htmlspecialchars($event['title']); ?>
-                                    </h3>
+                            class="flex-1 bg-white rounded-xl shadow-md p-3.5 sm:p-4 border-l-4 <?php echo explode(' ', $typeClass)[0]; ?> hover:shadow-lg transition min-w-0">
+                            <!-- Linha 1: Título no canto esquerdo e Tipo no canto direito -->
+                            <div class="flex items-start justify-between gap-2">
+                                <h3 class="text-base sm:text-lg font-bold text-gray-900 event-title leading-snug">
+                                    <?php echo htmlspecialchars($event['title']); ?>
+                                </h3>
+                                <span
+                                    class="px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold uppercase <?php echo $typeClass; ?> event-type border border-current/20 flex-shrink-0 whitespace-nowrap">
+                                    <?php echo $typeLabel; ?>
+                                </span>
+                            </div>
+
+                            <!-- Linha 2: Localização (e Cliente se houver) à esquerda / Botões de Ação ou Somente Visualização à direita -->
+                            <div class="flex items-center justify-between gap-2 mt-1.5 pt-0.5">
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 min-w-0">
                                     <?php if ($event['client_name']): ?>
-                                    <p class="text-sm text-gray-600 flex items-center mt-1 event-client">
-                                        <svg class="w-4 h-4 mr-1 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <span class="flex items-center font-medium event-client truncate" title="<?php echo htmlspecialchars($event['client_name']); ?>">
+                                        <svg class="w-3.5 h-3.5 mr-1 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z">
                                             </path>
                                         </svg>
                                         <?php if (!empty($event['client_id'])): ?>
-                                            <a href="client-details.php?id=<?php echo $event['client_id']; ?>" class="text-brand-700 hover:text-brand-900 font-semibold hover:underline">
+                                            <a href="client-details.php?id=<?php echo $event['client_id']; ?>" class="text-brand-700 hover:text-brand-900 font-semibold hover:underline truncate">
                                                 <?php echo htmlspecialchars($event['client_name']); ?>
                                             </a>
                                         <?php else: ?>
-                                            <?php echo htmlspecialchars($event['client_name']); ?>
+                                            <span class="truncate"><?php echo htmlspecialchars($event['client_name']); ?></span>
                                         <?php endif; ?>
-                                    </p>
+                                    </span>
                                     <?php endif; ?>
 
-                                    <?php if ($locStr || !empty($event['address'])): ?>
-                                    <p class="text-xs text-gray-500 flex items-center mt-1 event-location">
+                                    <?php if (!empty($displayLoc)): ?>
+                                    <span class="flex items-center event-location truncate">
                                         <svg class="w-3.5 h-3.5 mr-1 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                         </svg>
-                                        <span>
-                                            <?php 
-                                                echo htmlspecialchars(implode(' • ', array_filter([$locStr, $event['address'] ?? '']))); 
-                                            ?>
-                                        </span>
-                                    </p>
-                                    <?php endif; ?>
-
-                                    <?php if (!empty($event['banner_image'])): ?>
-                                        <div class="mt-3 mb-2 rounded-xl overflow-hidden border border-amber-200 shadow-sm max-w-md">
-                                            <a href="../<?php echo htmlspecialchars($event['banner_image']); ?>" target="_blank" title="Clique para ampliar o banner">
-                                                <img src="../<?php echo htmlspecialchars($event['banner_image']); ?>" alt="Banner do Leilão" class="w-full h-auto object-cover max-h-56 hover:scale-102 transition duration-200">
+                                        <?php if (!empty($mapUrl)): ?>
+                                            <a href="<?php echo htmlspecialchars($mapUrl); ?>"
+                                                <?php echo str_starts_with($mapUrl, 'http') ? 'target="_blank" rel="noopener noreferrer"' : ''; ?>
+                                                class="text-brand-700 hover:text-brand-900 font-semibold hover:underline inline-flex items-center gap-1 group/loc truncate"
+                                                title="<?php echo htmlspecialchars(!empty($event['address']) ? $event['address'] . ' • Clique para abrir o mapa' : 'Ver ' . $displayLoc . ' no mapa'); ?>">
+                                                <span class="truncate"><?php echo htmlspecialchars($displayLoc); ?></span>
+                                                <svg class="w-3 h-3 text-brand-500 group-hover/loc:translate-x-0.5 transition flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                                </svg>
                                             </a>
-                                        </div>
-                                    <?php endif; ?>
-
-                                    <?php if ($event['type'] === 'auction' && (!empty($event['auction_lots_link']) || !empty($event['auction_live_link']))): ?>
-                                        <div class="flex flex-wrap items-center gap-2 mt-3 pt-2 border-t border-amber-100">
-                                            <?php if (!empty($event['auction_lots_link'])): ?>
-                                                <a href="<?php echo htmlspecialchars($event['auction_lots_link']); ?>" target="_blank"
-                                                    class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-sm hover:shadow transition transform hover:-translate-y-0.5"
-                                                    title="Ver Vídeo dos Lotes">
-                                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                    </svg>
-                                                    <span>📹 Ver Vídeo dos Lotes</span>
-                                                </a>
-                                            <?php endif; ?>
-
-                                            <?php if (!empty($event['auction_live_link'])): ?>
-                                                <a href="<?php echo htmlspecialchars($event['auction_live_link']); ?>" target="_blank"
-                                                    class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs shadow-sm hover:shadow transition transform hover:-translate-y-0.5"
-                                                    title="Assistir Transmissão Ao Vivo">
-                                                    <svg class="w-4 h-4 text-white animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-                                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
-                                                    </svg>
-                                                    <span>🔴 Transmissão Ao Vivo</span>
-                                                </a>
-                                            <?php endif; ?>
-                                        </div>
-                                    <?php endif; ?>
-
-                                    <?php if ($event['observation']): ?>
-                                    <p class="text-sm text-gray-600 mt-2 italic bg-gray-50 p-2 rounded-lg border border-gray-100">
-                                        "<?php echo htmlspecialchars($event['observation']); ?>"
-                                    </p>
+                                        <?php else: ?>
+                                            <span class="text-gray-700 font-medium truncate"><?php echo htmlspecialchars($displayLoc); ?></span>
+                                        <?php endif; ?>
+                                    </span>
                                     <?php endif; ?>
                                 </div>
-                                <div class="flex flex-col items-end gap-2 flex-shrink-0">
-                                    <div class="flex items-center gap-1.5">
-                                        <?php if ($isAdmin && !empty($event['operator_name'])): ?>
-                                            <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium border border-slate-200" title="Criado por">
-                                                👤 <?php echo htmlspecialchars($event['operator_name']); ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        <span
-                                            class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase <?php echo $typeClass; ?> event-type border border-current/20">
-                                            <?php echo $typeLabel; ?>
-                                        </span>
-                                    </div>
 
-                                    <div class="flex items-center gap-1.5 mt-1">
+                                <!-- Botões de Ação no canto direito da Linha 2 -->
+                                <div class="flex items-center gap-1 flex-shrink-0 ml-auto">
+                                    <?php if ($canEdit): ?>
                                         <a href="schedule-edit.php?id=<?php echo $event['id']; ?>"
-                                            class="text-blue-500 hover:text-blue-700 p-1.5 rounded-lg hover:bg-blue-50 transition cursor-pointer" title="Editar Compromisso">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            class="text-blue-500 hover:text-blue-700 p-1 rounded-lg hover:bg-blue-50 transition cursor-pointer" title="Editar Compromisso">
+                                            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
                                                 </path>
@@ -299,9 +280,9 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
                                         <form method="POST" onsubmit="confirmDelete(event)" class="inline">
                                             <input type="hidden" name="delete_event" value="1">
                                             <input type="hidden" name="id" value="<?php echo $event['id']; ?>">
-                                            <button type="submit" class="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition cursor-pointer"
+                                            <button type="submit" class="text-red-500 hover:text-red-700 p-1 rounded-lg hover:bg-red-50 transition cursor-pointer"
                                                 title="Excluir Compromisso">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor"
+                                                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor"
                                                     viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round"
                                                         stroke-width="2"
@@ -310,9 +291,61 @@ $initialEndDate = date('Y-m-d', strtotime('+15 days'));
                                                 </svg>
                                             </button>
                                         </form>
-                                    </div>
+                                    <?php else: ?>
+                                        <div class="flex items-center gap-1 text-[11px] text-gray-400 italic">
+                                            <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                            </svg>
+                                            <span class="hidden sm:inline">Somente visualização</span>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
+
+                            <!-- Linha 3: Imagem do Banner (se houver) -->
+                            <?php if (!empty($event['banner_image'])): ?>
+                                <div class="mt-3 mb-2 rounded-xl overflow-hidden border border-amber-200 shadow-sm max-w-sm">
+                                    <a href="../<?php echo htmlspecialchars($event['banner_image']); ?>" target="_blank" title="Clique para ampliar o banner">
+                                        <img src="../<?php echo htmlspecialchars($event['banner_image']); ?>" alt="Banner do Leilão" class="w-full h-auto object-cover max-h-48 hover:scale-102 transition duration-200">
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+
+                            <!-- Linha 4: Botões Vídeo Lotes e Ao Vivo -->
+                            <?php if ($event['type'] === 'auction' && (!empty($event['auction_lots_link']) || !empty($event['auction_live_link']))): ?>
+                                <div class="flex flex-wrap items-center gap-2 mt-2.5 pt-2 border-t border-amber-100">
+                                    <?php if (!empty($event['auction_lots_link'])): ?>
+                                        <a href="<?php echo htmlspecialchars($event['auction_lots_link']); ?>" target="_blank"
+                                            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-sm hover:shadow transition transform hover:-translate-y-0.5"
+                                            title="Ver Vídeo dos Lotes">
+                                            <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                            <span>Vídeo Lotes</span>
+                                        </a>
+                                    <?php endif; ?>
+
+                                    <?php if (!empty($event['auction_live_link'])): ?>
+                                        <a href="<?php echo htmlspecialchars($event['auction_live_link']); ?>" target="_blank"
+                                            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs shadow-sm hover:shadow transition transform hover:-translate-y-0.5"
+                                            title="Assistir Transmissão Ao Vivo">
+                                            <svg class="w-3.5 h-3.5 text-white animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                                            </svg>
+                                            <span>Ao Vivo</span>
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <!-- Linha 5: Observações -->
+                            <?php if ($event['observation']): ?>
+                            <p class="text-xs sm:text-sm text-gray-600 mt-2 italic bg-gray-50 p-2 rounded-lg border border-gray-100">
+                                "<?php echo htmlspecialchars($event['observation']); ?>"
+                            </p>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <?php endforeach; ?>

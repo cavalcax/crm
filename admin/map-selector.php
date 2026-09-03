@@ -191,13 +191,13 @@ $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $clients = $stmt->fetchAll();
 
-// Fetch Future Auctions for Map Selection with valid location coordinates
+// Fetch Future Auctions for Map Selection with valid location coordinates (visible to all users)
 $stmtAuc = $pdo->prepare("
-    SELECT s.*, c.name as client_name 
+    SELECT s.*, c.name as client_name, u.name as operator_name 
     FROM " . TABLE_NAME . "schedule s 
     LEFT JOIN " . TABLE_NAME . "clients c ON s.client_id = c.id 
-    WHERE s.user_id = ? 
-      AND s.type = 'auction' 
+    LEFT JOIN " . TABLE_NAME . "users u ON s.user_id = u.id
+    WHERE s.type = 'auction' 
       AND s.start_time >= NOW()
       AND s.latitude IS NOT NULL 
       AND s.longitude IS NOT NULL
@@ -205,7 +205,7 @@ $stmtAuc = $pdo->prepare("
       AND s.longitude != 0
     ORDER BY s.start_time ASC
 ");
-$stmtAuc->execute([$user_id]);
+$stmtAuc->execute();
 $auctions = $stmtAuc->fetchAll();
 
 // Fetch Options for multi-selects
@@ -270,6 +270,7 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                             700: '#7A5400',
                             800: '#4A340C',
                             900: '#2A1D06',
+                            950: '#170F03',
                         }
                     }
                 }
@@ -494,6 +495,11 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                                 </td>
                                                 <td class="px-5 py-4 text-sm">
                                                     <p class="font-bold text-gray-900"><?php echo htmlspecialchars($auc['title']); ?></p>
+                                                    <?php if (!empty($auc['operator_name'])): ?>
+                                                        <span class="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium border border-amber-200 inline-block mt-0.5">
+                                                            👤 <?php echo htmlspecialchars($auc['operator_name']); ?>
+                                                        </span>
+                                                    <?php endif; ?>
                                                     <?php if (!empty($auc['address'])): ?>
                                                         <p class="text-xs text-gray-500 mt-0.5"><?php echo htmlspecialchars($auc['address']); ?></p>
                                                     <?php endif; ?>

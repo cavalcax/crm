@@ -179,12 +179,27 @@
     // ==========================================
     const sidebar = document.getElementById('sidebar');
     const sidebarBtn = document.getElementById('sidebarBtn');
+    let sidebarBackdrop = document.getElementById('sidebarBackdrop');
+
+    if (!sidebarBackdrop && sidebar) {
+        sidebarBackdrop = document.createElement('div');
+        sidebarBackdrop.id = 'sidebarBackdrop';
+        sidebarBackdrop.className = 'fixed inset-0 bg-black/50 z-40 md:hidden hidden transition-opacity duration-200';
+        document.body.appendChild(sidebarBackdrop);
+        sidebarBackdrop.addEventListener('click', () => {
+            sidebar.classList.add('-translate-x-full');
+            sidebarBackdrop.classList.add('hidden');
+        });
+    }
 
     if (sidebarBtn) {
         sidebarBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (sidebar) {
                 sidebar.classList.toggle('-translate-x-full');
+                if (sidebarBackdrop) {
+                    sidebarBackdrop.classList.toggle('hidden', sidebar.classList.contains('-translate-x-full'));
+                }
             }
         });
     }
@@ -194,6 +209,9 @@
         if (sidebar && !sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) {
             if (!sidebar.contains(e.target) && sidebarBtn && !sidebarBtn.contains(e.target)) {
                 sidebar.classList.add('-translate-x-full');
+                if (sidebarBackdrop) {
+                    sidebarBackdrop.classList.add('hidden');
+                }
             }
         }
     });
@@ -205,6 +223,9 @@
         }
         if (sidebar && !sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) {
             sidebar.classList.add('-translate-x-full');
+            if (sidebarBackdrop) {
+                sidebarBackdrop.classList.add('hidden');
+            }
         }
         if (typeof notifDropdown !== 'undefined' && notifDropdown && !notifDropdown.classList.contains('hidden')) {
             notifDropdown.classList.add('hidden');

@@ -16,11 +16,24 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+    // Only intercept GET requests
+    if (event.request.method !== 'GET') {
+        return;
+    }
+
     // Network first approach for SaaS (fresh data is critical)
     event.respondWith(
         fetch(event.request)
-            .catch(() => {
-                return caches.match(event.request);
+            .catch(async () => {
+                const cached = await caches.match(event.request);
+                if (cached) {
+                    return cached;
+                }
+                return new Response('Rede indisponível no momento.', {
+                    status: 503,
+                    statusText: 'Service Unavailable',
+                    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+                });
             })
     );
 });

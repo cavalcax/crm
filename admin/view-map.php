@@ -18,6 +18,8 @@ $auction_ids = !empty($_POST['selected_auctions']) ? array_map('intval', (array)
 if (empty($auction_ids)) {
     if (!empty($_GET['auction_id'])) {
         $auction_ids = [intval($_GET['auction_id'])];
+    } elseif (!empty($_GET['event_id'])) {
+        $auction_ids = [intval($_GET['event_id'])];
     } elseif (!empty($_GET['selected_auctions'])) {
         $auction_ids = array_map('intval', (array)$_GET['selected_auctions']);
     }
@@ -74,10 +76,10 @@ if (!empty($auction_ids)) {
     $sqlAuc = "SELECT s.*, c.name as client_name 
                FROM " . TABLE_NAME . "schedule s 
                LEFT JOIN " . TABLE_NAME . "clients c ON s.client_id = c.id 
-               WHERE s.id IN ($aucPlaceholders) AND s.user_id = ? AND s.type = 'auction' AND s.start_time >= NOW()
+               WHERE s.id IN ($aucPlaceholders)
                ORDER BY s.start_time ASC";
     $stmtAuc = $pdo->prepare($sqlAuc);
-    $paramsAuc = array_merge($auction_ids, [$user_id]);
+    $paramsAuc = $auction_ids;
     $stmtAuc->execute($paramsAuc);
     $auctions = $stmtAuc->fetchAll(PDO::FETCH_ASSOC);
 
@@ -320,8 +322,18 @@ $auctionsJson = json_encode($validAuctions);
 <body class="h-screen w-screen overflow-hidden flex flex-col relative font-sans">
 
     <!-- Bottom Left Controls (Back button) -->
+    <?php
+    $fallbackUrl = 'map-selector.php';
+    if (!empty($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], $_SERVER['HTTP_HOST']) !== false && strpos($_SERVER['HTTP_REFERER'], 'view-map.php') === false) {
+        $fallbackUrl = $_SERVER['HTTP_REFERER'];
+    } elseif (!empty($_GET['event_id']) || !empty($_GET['auction_id'])) {
+        $fallbackUrl = 'schedule.php';
+    } elseif (!empty($_GET['client_id'])) {
+        $fallbackUrl = 'clients.php';
+    }
+    ?>
     <div class="absolute bottom-5 left-3 sm:bottom-6 sm:left-4 z-[1001] flex items-center" style="z-index: 1001;">
-        <a href="map-selector.php"
+        <a href="<?php echo htmlspecialchars($fallbackUrl); ?>" id="btnBackToOrigin" onclick="goBackToOrigin(event)"
             class="bg-white/95 hover:bg-white text-gray-800 font-bold py-2.5 px-4 rounded-xl shadow-lg border border-gray-200/80 flex items-center transition hover:-translate-y-0.5 text-xs sm:text-sm backdrop-blur-sm cursor-pointer">
             <svg class="w-4 h-4 mr-1.5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18">
@@ -330,6 +342,15 @@ $auctionsJson = json_encode($validAuctions);
             Voltar
         </a>
     </div>
+
+    <script>
+        function goBackToOrigin(e) {
+            if (window.history.length > 1 && document.referrer && document.referrer.includes(window.location.host) && !document.referrer.includes('view-map.php')) {
+                e.preventDefault();
+                window.history.back();
+            }
+        }
+    </script>
 
     <!-- Top Right Controls (Toggle Drawer Button) -->
     <div class="absolute top-2.5 right-2.5 z-[1001] flex items-center" style="z-index: 1001;">

@@ -6,7 +6,7 @@ $scriptDir = rtrim(dirname(dirname($_SERVER['PHP_SELF'])), '/\\');
 $sidebarPrecadastroUrl = $protocol . "://" . $host . $scriptDir . "/precadastro.php?ref=" . (function_exists('encryptUserId') ? encryptUserId($currentUserId) : $currentUserId);
 ?>
 <aside
-    class="bg-brand-900 text-white w-64 space-y-6 py-2 px-2 absolute inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out z-20 flex flex-col justify-between"
+    class="bg-brand-900 text-white w-64 space-y-6 py-2 px-2 fixed md:relative inset-y-0 left-0 transform -translate-x-full md:translate-x-0 transition duration-200 ease-in-out z-50 md:z-20 flex flex-col justify-between shadow-2xl md:shadow-none"
     id="sidebar">
     <div>
         <div class="px-2 py-2 text-center border-b border-brand-800 pb-4 mb-2">

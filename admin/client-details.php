@@ -271,10 +271,15 @@ $clientSchedules = $stmt->fetchAll();
                                             </button>
                                         </form>
                                     <?php else: ?>
-                                        <span class="p-1 inline-block <?php echo !empty($client['is_potential']) ? 'text-amber-400' : 'text-gray-200'; ?>"
+                                        <span
+                                            class="p-1 inline-block <?php echo !empty($client['is_potential']) ? 'text-amber-400' : 'text-gray-200'; ?>"
                                             title="<?php echo !empty($client['is_potential']) ? 'Cliente em Potencial' : 'Não marcado como Potencial'; ?>">
-                                            <svg class="w-10 h-10 sm:w-11 sm:h-11" fill="<?php echo !empty($client['is_potential']) ? 'currentColor' : 'none'; ?>" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                                            <svg class="w-10 h-10 sm:w-11 sm:h-11"
+                                                fill="<?php echo !empty($client['is_potential']) ? 'currentColor' : 'none'; ?>"
+                                                stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z">
+                                                </path>
                                             </svg>
                                         </span>
                                     <?php endif; ?>
@@ -314,13 +319,18 @@ $clientSchedules = $stmt->fetchAll();
                                             </span>
                                         <?php endif; ?>
 
-                                        <?php if ((int)$client['user_id'] === (int)$user_id): ?>
-                                            <span class="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold border border-emerald-300 inline-flex items-center gap-1" title="Cliente sob sua responsabilidade">
+                                        <?php if ((int) $client['user_id'] === (int) $user_id): ?>
+                                            <span
+                                                class="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold border border-emerald-300 inline-flex items-center gap-1"
+                                                title="Cliente sob sua responsabilidade">
                                                 👤 Meu Cliente
                                             </span>
                                         <?php else: ?>
-                                            <span class="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full font-bold border border-gray-300 inline-flex items-center gap-1" title="Operador Responsável por este cliente">
-                                                👤 <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Usuário'); ?>
+                                            <span
+                                                class="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full font-bold border border-gray-300 inline-flex items-center gap-1"
+                                                title="Operador Responsável por este cliente">
+                                                👤
+                                                <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Usuário'); ?>
                                             </span>
                                         <?php endif; ?>
                                     </div>
@@ -373,7 +383,8 @@ $clientSchedules = $stmt->fetchAll();
                                                 <svg class="w-4 h-4 mr-1 text-emerald-500 group-hover:text-emerald-700 flex-shrink-0 transition"
                                                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
+                                                        d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7">
+                                                    </path>
                                                 </svg>
                                                 <span><?php echo htmlspecialchars($locStr); ?></span>
                                             </a>
@@ -563,7 +574,8 @@ $clientSchedules = $stmt->fetchAll();
                                                 <?php echo $csTypeLabels[$cs['type']] ?? 'Outro'; ?>
                                             </span>
                                             <?php if ($isAdmin && !empty($cs['operator_name'])): ?>
-                                                <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium border border-slate-200">
+                                                <span
+                                                    class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium border border-slate-200">
                                                     👤 <?php echo htmlspecialchars($cs['operator_name']); ?>
                                                 </span>
                                             <?php endif; ?>
@@ -597,9 +609,12 @@ $clientSchedules = $stmt->fetchAll();
                                     <?php endif; ?>
 
                                     <?php if (!empty($cs['banner_image'])): ?>
-                                        <div class="mt-2 mb-2 rounded-lg overflow-hidden border border-amber-200 shadow-sm max-h-36">
+                                        <div
+                                            class="mt-2 mb-2 rounded-lg overflow-hidden border border-amber-200 shadow-sm max-h-36">
                                             <a href="../<?php echo htmlspecialchars($cs['banner_image']); ?>" target="_blank">
-                                                <img src="../<?php echo htmlspecialchars($cs['banner_image']); ?>" alt="Banner do Leilão" class="w-full h-auto object-cover max-h-36 hover:scale-102 transition duration-150">
+                                                <img src="../<?php echo htmlspecialchars($cs['banner_image']); ?>"
+                                                    alt="Banner do Leilão"
+                                                    class="w-full h-auto object-cover max-h-36 hover:scale-102 transition duration-150">
                                             </a>
                                         </div>
                                     <?php endif; ?>
@@ -610,14 +625,14 @@ $clientSchedules = $stmt->fetchAll();
                                                 <a href="<?php echo htmlspecialchars($cs['auction_lots_link']); ?>" target="_blank"
                                                     class="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-md text-[11px] shadow-sm transition"
                                                     title="Ver Vídeo dos Lotes">
-                                                    📹 Vídeo Lotes
+                                                    Vídeo Lotes
                                                 </a>
                                             <?php endif; ?>
                                             <?php if (!empty($cs['auction_live_link'])): ?>
                                                 <a href="<?php echo htmlspecialchars($cs['auction_live_link']); ?>" target="_blank"
                                                     class="inline-flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded-md text-[11px] shadow-sm transition"
                                                     title="Assistir Transmissão Ao Vivo">
-                                                    🔴 Ao Vivo
+                                                    Ao Vivo
                                                 </a>
                                             <?php endif; ?>
                                         </div>
@@ -721,7 +736,8 @@ $clientSchedules = $stmt->fetchAll();
                         </div>
 
                         <div class="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Produção Mensal de Leite</p>
+                            <p class="text-xs font-bold uppercase text-brand-700 tracking-wider">Produção Mensal de
+                                Leite</p>
                             <p class="text-base font-semibold text-gray-800 mt-1">
                                 <?php echo htmlspecialchars($client['milk_production_range'] ?: '-'); ?>
                             </p>

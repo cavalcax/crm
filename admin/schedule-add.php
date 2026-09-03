@@ -291,6 +291,15 @@ $init_lng = $_POST['longitude'] ?? ($preselected_client['longitude'] ?? '');
                                     <select name="client_id" id="client_id" class="w-full">
                                         <option value=""></option>
                                         <?php foreach ($clients as $client): ?>
+                                            <?php
+                                                $clientLabel = $client['name'];
+                                                $details = [];
+                                                if (!empty($client['farm_name'])) $details[] = $client['farm_name'];
+                                                if (!empty($client['city'])) $details[] = $client['city'] . (!empty($client['uf']) ? '/' . $client['uf'] : '');
+                                                if (!empty($details)) {
+                                                    $clientLabel .= ' (' . implode(' - ', $details) . ')';
+                                                }
+                                            ?>
                                             <option value="<?php echo $client['id']; ?>"
                                                 data-farm="<?php echo htmlspecialchars($client['farm_name'] ?? ''); ?>"
                                                 data-city="<?php echo htmlspecialchars($client['city'] ?? ''); ?>"
@@ -299,8 +308,7 @@ $init_lng = $_POST['longitude'] ?? ($preselected_client['longitude'] ?? '');
                                                 data-lat="<?php echo htmlspecialchars($client['latitude'] ?? ''); ?>"
                                                 data-lng="<?php echo htmlspecialchars($client['longitude'] ?? ''); ?>"
                                                 <?php echo ($selected_client_id == $client['id']) ? 'selected' : ''; ?>>
-                                                <?php echo htmlspecialchars($client['name']); ?>
-                                                <?php echo !empty($client['farm_name']) ? ' (' . htmlspecialchars($client['farm_name']) . ')' : ''; ?>
+                                                <?php echo htmlspecialchars($clientLabel); ?>
                                             </option>
                                         <?php endforeach; ?>
                                     </select>
@@ -389,7 +397,7 @@ $init_lng = $_POST['longitude'] ?? ($preselected_client['longitude'] ?? '');
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
-    <!-- Google Maps script -->
+    <!-- Base Page Script -->
     <script>
         let map;
         let marker;
@@ -425,11 +433,11 @@ $init_lng = $_POST['longitude'] ?? ($preselected_client['longitude'] ?? '');
                 const ufInput = document.getElementById('ufInput');
                 const addressInput = document.getElementById('addressInput');
 
-                if (city && !cityInput.value) cityInput.value = city;
-                if (uf && !ufInput.value) ufInput.value = uf;
-                if (address && !addressInput.value) addressInput.value = address;
+                if (city) cityInput.value = city;
+                if (uf) ufInput.value = uf;
+                if (address) addressInput.value = address;
 
-                if (lat && lng) {
+                if (lat && lng && typeof setMarkerPosition === 'function') {
                     setMarkerPosition(parseFloat(lat), parseFloat(lng), true);
                 }
             });
@@ -453,6 +461,7 @@ $init_lng = $_POST['longitude'] ?? ($preselected_client['longitude'] ?? '');
                 toggleAuctionFields();
             }
         });
+    </script>
 
     <?php if (defined('MAP_PROVIDER') && MAP_PROVIDER === 'google_maps'): ?>
     <!-- Google Maps JS API -->
