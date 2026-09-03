@@ -65,6 +65,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $animal_count_range = sanitize($_POST['animal_count_range'] ?? '');
     $milk_production_range = sanitize($_POST['milk_production_range'] ?? '');
 
+    if ($is_milk_producer === 'Não') {
+        $animal_count_range = '';
+        $milk_production_range = '';
+    }
+
     if (empty($payment_condition)) {
         $error = "Por favor, selecione a condição de pagamento.";
     } elseif (empty($breed_interests_array)) {
@@ -81,9 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Por favor, especifique o sistema da sua produção no campo Outro.";
     } elseif (empty($is_milk_producer)) {
         $error = "Por favor, responda se você já é produtor de leite.";
-    } elseif (empty($animal_count_range)) {
+    } elseif ($is_milk_producer === 'Sim' && empty($animal_count_range)) {
         $error = "Por favor, selecione a quantidade de animais que possui atualmente.";
-    } elseif (empty($milk_production_range) || $milk_production_range === '0.000' || (int) preg_replace('/\D/', '', $milk_production_range) === 0) {
+    } elseif ($is_milk_producer === 'Sim' && (empty($milk_production_range) || $milk_production_range === '0.000' || (int) preg_replace('/\D/', '', $milk_production_range) === 0)) {
         $error = "Por favor, informe quantos litros de leite você entrega por mês atualmente.";
     } elseif (empty($name)) {
         $error = "Por favor, informe seu nome completo.";
@@ -351,46 +356,48 @@ $states = getBrazilianStates();
                                 <label
                                     class="flex-1 flex items-center p-3 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-brand-500 transition">
                                     <input type="radio" name="is_milk_producer" value="<?php echo $opt; ?>" required
-                                        class="h-4 w-4 text-brand-500 focus:ring-brand-500 border-gray-300">
+                                        class="is-milk-producer-radio h-4 w-4 text-brand-500 focus:ring-brand-500 border-gray-300">
                                     <span class="ml-3 text-sm text-gray-700 font-medium"><?php echo $opt; ?></span>
                                 </label>
                             <?php endforeach; ?>
                         </div>
                     </div>
 
-                    <!-- Quantidade de animais que possui atualmente -->
-                    <div class="bg-brand-50 p-5 rounded-xl border border-brand-100">
-                        <label class="block text-brand-900 font-bold mb-3 text-base">
-                            Quantos animais você possui atualmente?
-                        </label>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <?php foreach (['0 a 50 animais', '51 a 100 animais', '101 a 150 animais', '151 a 200 animais', 'Mais de 200 animais'] as $opt): ?>
-                                <label
-                                    class="flex items-center p-3 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-brand-500 transition">
-                                    <input type="radio" name="animal_count_range" value="<?php echo $opt; ?>" required
-                                        class="h-4 w-4 text-brand-500 focus:ring-brand-500 border-gray-300">
-                                    <span class="ml-3 text-sm text-gray-700 font-medium"><?php echo $opt; ?></span>
-                                </label>
-                            <?php endforeach; ?>
+                    <!-- Bloco condicional para quem já é Produtor de Leite -->
+                    <div id="milkProducerQuestionsContainer" class="space-y-6">
+                        <!-- Quantidade de animais que possui atualmente -->
+                        <div class="bg-brand-50 p-5 rounded-xl border border-brand-100">
+                            <label class="block text-brand-900 font-bold mb-3 text-base">
+                                Quantos animais você possui atualmente?
+                            </label>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <?php foreach (['0 a 50 animais', '51 a 100 animais', '101 a 150 animais', '151 a 200 animais', 'Mais de 200 animais'] as $opt): ?>
+                                    <label
+                                        class="flex items-center p-3 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-brand-500 transition">
+                                        <input type="radio" name="animal_count_range" value="<?php echo $opt; ?>"
+                                            class="animal-count-radio h-4 w-4 text-brand-500 focus:ring-brand-500 border-gray-300">
+                                        <span class="ml-3 text-sm text-gray-700 font-medium"><?php echo $opt; ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
-                    </div>
 
-                    <!-- Quantos litros de leite você entrega por mês atualmente? -->
-                    <div class="bg-brand-50 p-5 rounded-xl border border-brand-100">
-                        <label for="milkProductionInput" class="block text-brand-900 font-bold mb-1 text-base">
-                            Quantos litros de leite você entrega por mês atualmente?
-                        </label>
-                        <p class="text-xs text-gray-500 mb-3">Digite a quantidade mensal aproximada de litros de leite
-                            entregues.</p>
-                        <div class="relative max-w-xs">
-                            <input type="text" inputmode="numeric" name="milk_production_range" id="milkProductionInput"
-                                value="<?php echo htmlspecialchars(!empty($milk_production_range) ? $milk_production_range : '0.000'); ?>"
-                                required
-                                class="w-full pl-4 pr-24 py-3 border border-gray-300 rounded-lg text-lg font-bold text-gray-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white">
-                            <span
-                                class="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-xs font-bold text-gray-400 uppercase">
-                                Litros/Mês
-                            </span>
+                        <!-- Quantos litros de leite você entrega por mês atualmente? -->
+                        <div class="bg-brand-50 p-5 rounded-xl border border-brand-100">
+                            <label for="milkProductionInput" class="block text-brand-900 font-bold mb-1 text-base">
+                                Quantos litros de leite você entrega por mês atualmente?
+                            </label>
+                            <p class="text-xs text-gray-500 mb-3">Digite a quantidade mensal aproximada de litros de leite
+                                entregues.</p>
+                            <div class="relative max-w-xs">
+                                <input type="text" inputmode="numeric" name="milk_production_range" id="milkProductionInput"
+                                    value="<?php echo htmlspecialchars(!empty($milk_production_range) ? $milk_production_range : '0.000'); ?>"
+                                    class="w-full pl-4 pr-24 py-3 border border-gray-300 rounded-lg text-lg font-bold text-gray-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white">
+                                <span
+                                    class="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-xs font-bold text-gray-400 uppercase">
+                                    Litros/Mês
+                                </span>
+                            </div>
                         </div>
                     </div>
 
@@ -539,9 +546,46 @@ $states = getBrazilianStates();
             cb.addEventListener('click', updateAnimalQuestionsVisibility);
         });
 
-        // Run on load in case of browser-restored state
-        document.addEventListener('DOMContentLoaded', updateAnimalQuestionsVisibility);
-        updateAnimalQuestionsVisibility();
+        // Dynamic Visibility for Milk Producer Questions
+        const milkProducerRadios = document.querySelectorAll('.is-milk-producer-radio');
+        const milkProducerQuestionsContainer = document.getElementById('milkProducerQuestionsContainer');
+        const animalCountRadios = document.querySelectorAll('.animal-count-radio');
+        const milkProductionInput = document.getElementById('milkProductionInput');
+
+        function updateMilkProducerQuestionsVisibility() {
+            if (!milkProducerQuestionsContainer) return;
+            const selectedRadio = document.querySelector('.is-milk-producer-radio:checked');
+            const isProducer = selectedRadio && selectedRadio.value === 'Sim';
+
+            if (isProducer) {
+                milkProducerQuestionsContainer.classList.remove('hidden');
+                milkProducerQuestionsContainer.style.display = 'block';
+                animalCountRadios.forEach(r => r.required = true);
+                if (milkProductionInput) milkProductionInput.required = true;
+            } else {
+                milkProducerQuestionsContainer.classList.add('hidden');
+                milkProducerQuestionsContainer.style.display = 'none';
+                animalCountRadios.forEach(r => {
+                    r.required = false;
+                    r.checked = false;
+                });
+                if (milkProductionInput) {
+                    milkProductionInput.required = false;
+                    milkProductionInput.value = '0.000';
+                }
+            }
+        }
+
+        milkProducerRadios.forEach(r => {
+            r.addEventListener('change', updateMilkProducerQuestionsVisibility);
+            r.addEventListener('click', updateMilkProducerQuestionsVisibility);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateAnimalQuestionsVisibility();
+            updateMilkProducerQuestionsVisibility();
+        });
+        updateMilkProducerQuestionsVisibility();
 
         prodSystemRadios.forEach(radio => {
             radio.addEventListener('change', function () {
