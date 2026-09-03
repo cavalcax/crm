@@ -160,6 +160,47 @@ $auctionsJson = json_encode($validAuctions);
             border: none !important;
         }
 
+        /* Custom Map Tooltip / Label for Leaflet */
+        .leaflet-tooltip.custom-map-tooltip {
+            background-color: rgba(255, 255, 255, 0.96) !important;
+            border: 1px solid rgba(0, 0, 0, 0.15) !important;
+            border-radius: 6px !important;
+            padding: 2px 7px !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            color: #1f2937 !important;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22) !important;
+            white-space: nowrap !important;
+            pointer-events: auto !important;
+        }
+        .leaflet-tooltip.custom-map-tooltip::before {
+            display: none !important;
+        }
+        .leaflet-tooltip.auction-tooltip {
+            background-color: #fef2f2 !important;
+            border-color: #fca5a5 !important;
+            color: #991b1b !important;
+        }
+
+        /* Custom Marker Label for Google Maps */
+        .google-map-marker-label {
+            background-color: rgba(255, 255, 255, 0.96) !important;
+            border: 1px solid rgba(0, 0, 0, 0.15) !important;
+            border-radius: 6px !important;
+            padding: 2px 7px !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            color: #1f2937 !important;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22) !important;
+            transform: translateY(22px) !important;
+            white-space: nowrap !important;
+        }
+        .google-map-marker-label.auction-label {
+            background-color: #fef2f2 !important;
+            border-color: #fca5a5 !important;
+            color: #991b1b !important;
+        }
+
         /* Compact modern SweetAlert2 styles without wasted header space */
         .swal2-container {
             position: fixed !important;
@@ -1061,7 +1102,14 @@ $auctionsJson = json_encode($validAuctions);
                 const marker = new google.maps.Marker({
                     position: pos,
                     title: `${client.name}${client.farm_name ? ' (' + client.farm_name + ')' : ''}`,
-                    icon: createGooglePinSvg(client)
+                    icon: createGooglePinSvg(client),
+                    label: {
+                        text: client.name,
+                        color: '#1f2937',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        className: 'google-map-marker-label'
+                    }
                 });
 
                 marker.addListener('click', () => {
@@ -1096,7 +1144,14 @@ $auctionsJson = json_encode($validAuctions);
                     position: pos,
                     title: `Leilão: ${auction.title}`,
                     icon: createGoogleAuctionPinSvg(),
-                    zIndex: 1000
+                    zIndex: 1000,
+                    label: {
+                        text: auction.title,
+                        color: '#991b1b',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        className: 'google-map-marker-label auction-label'
+                    }
                 });
 
                 marker.addListener('click', () => {
@@ -1270,6 +1325,14 @@ $auctionsJson = json_encode($validAuctions);
                     title: `${client.name}${client.farm_name ? ' (' + client.farm_name + ')' : ''}`
                 });
 
+                marker.bindTooltip(client.name, {
+                    permanent: true,
+                    direction: 'bottom',
+                    className: 'custom-map-tooltip',
+                    offset: [0, 4],
+                    opacity: 1
+                });
+
                 marker.on('click', () => {
                     mapInstance.setView([lat, lng], 15);
                     showClientModal(client.id);
@@ -1299,6 +1362,14 @@ $auctionsJson = json_encode($validAuctions);
                     icon: createAuctionPinIcon(auction),
                     title: `Leilão: ${auction.title}`,
                     zIndexOffset: 1000
+                });
+
+                marker.bindTooltip(auction.title, {
+                    permanent: true,
+                    direction: 'bottom',
+                    className: 'custom-map-tooltip auction-tooltip',
+                    offset: [0, 4],
+                    opacity: 1
                 });
 
                 marker.on('click', () => {

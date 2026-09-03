@@ -27,11 +27,13 @@ $milk_max_num = (int)preg_replace('/\D/', '', $raw_milk_max);
 
 // Dynamic query
 $query = "
-    SELECT c.id as client_id, c.name as client_name, c.farm_name, c.phone, c.email, c.uf, c.city, c.status, c.is_potential,
+    SELECT c.id as client_id, c.user_id, c.name as client_name, c.farm_name, c.phone, c.email, c.uf, c.city, c.status, c.is_potential,
            c.payment_condition, c.breed_interests, c.animal_categories, c.production_system, c.is_milk_producer, c.acquisition_reason,
            c.animal_count_range, c.milk_production_range, c.purchase_animal_count, c.latitude, c.longitude,
+           u.name as operator_name,
            i.id as intention_id, i.type, i.description, i.value, i.status as intention_status, cat.name as category_name 
     FROM " . TABLE_NAME . "clients c
+    LEFT JOIN " . TABLE_NAME . "users u ON c.user_id = u.id
     LEFT JOIN " . TABLE_NAME . "intentions i ON i.client_id = c.id AND (i.status = 'active' OR i.status IS NULL)
     LEFT JOIN " . TABLE_NAME . "categories cat ON i.category_id = cat.id 
     WHERE c.user_id = :user_id
@@ -455,13 +457,24 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                         <tr class="hover:bg-brand-50/30 transition">
                                             <!-- Cliente -->
                                             <td class="px-5 py-4 bg-white text-sm">
-                                                <a href="client-details.php?id=<?php echo $item['client_id']; ?>"
-                                                    class="font-bold text-brand-700 hover:underline flex items-center text-sm">
-                                                    <?php echo htmlspecialchars($item['client_name']); ?>
-                                                    <?php if (!empty($item['is_potential'])): ?>
-                                                        <span class="ml-1.5 text-amber-500 text-xs" title="Cliente em Potencial">⭐</span>
+                                                <div class="flex items-center gap-1.5 flex-wrap">
+                                                    <a href="client-details.php?id=<?php echo $item['client_id']; ?>"
+                                                        class="font-bold text-brand-700 hover:underline flex items-center text-sm">
+                                                        <?php echo htmlspecialchars($item['client_name']); ?>
+                                                        <?php if (!empty($item['is_potential'])): ?>
+                                                            <span class="ml-1.5 text-amber-500 text-xs" title="Cliente em Potencial">⭐</span>
+                                                        <?php endif; ?>
+                                                    </a>
+                                                    <?php if ((int)($item['user_id'] ?? 0) !== (int)$user_id): ?>
+                                                        <span class="inline-flex items-center justify-center text-red-500 hover:text-red-700 transition shrink-0 select-none" title="Cliente de outro usuário (Responsável: <?php echo htmlspecialchars($item['operator_name'] ?? 'Outro Usuário'); ?>)">
+                                                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                                                <circle cx="9" cy="7" r="4"></circle>
+                                                                <line x1="3" y1="3" x2="21" y2="21" stroke-width="2.5"></line>
+                                                            </svg>
+                                                        </span>
                                                     <?php endif; ?>
-                                                </a>
+                                                </div>
                                                 <?php if (!empty($item['farm_name'])): ?>
                                                     <p class="text-xs text-brand-900 font-medium mt-0.5">🏡 <?php echo htmlspecialchars($item['farm_name']); ?></p>
                                                 <?php endif; ?>

@@ -314,9 +314,13 @@ $clientSchedules = $stmt->fetchAll();
                                             </span>
                                         <?php endif; ?>
 
-                                        <?php if ($client['user_id'] != $user_id): ?>
-                                            <span class="bg-slate-100 text-slate-700 text-xs px-2.5 py-1 rounded-md font-semibold border border-slate-200" title="Operador Responsável por este cliente">
-                                                👤 Responsável: <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Operador'); ?>
+                                        <?php if ((int)$client['user_id'] === (int)$user_id): ?>
+                                            <span class="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold border border-emerald-300 inline-flex items-center gap-1" title="Cliente sob sua responsabilidade">
+                                                👤 Meu Cliente
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full font-bold border border-gray-300 inline-flex items-center gap-1" title="Operador Responsável por este cliente">
+                                                👤 <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Usuário'); ?>
                                             </span>
                                         <?php endif; ?>
                                     </div>

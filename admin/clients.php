@@ -7,6 +7,18 @@ $user_id = $_SESSION['user_id'];
 $isAdmin = isAdmin();
 $pageTitle = 'Clientes';
 
+// Helper to keep query parameters on redirect
+function getClientRedirectUrl() {
+    $allowedParams = ['q', 'search', 'status', 'scope', 'sort', 'order', 'page', 'per_page'];
+    $queryParams = [];
+    foreach ($allowedParams as $param) {
+        if (isset($_GET[$param]) && $_GET[$param] !== '') {
+            $queryParams[$param] = $_GET[$param];
+        }
+    }
+    return 'clients.php' . (!empty($queryParams) ? '?' . http_build_query($queryParams) : '');
+}
+
 // Handle Delete Client
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_client'])) {
     $client_id_to_delete = intval($_POST['client_id']);
@@ -18,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_client'])) {
         $stmt = $pdo->prepare("DELETE FROM " . TABLE_NAME . "clients WHERE id = ?");
         $stmt->execute([$client_id_to_delete]);
     }
-    header("Location: clients.php");
+    header("Location: " . getClientRedirectUrl());
     exit;
 }
 
@@ -43,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['attend_client']) || 
             }
         }
     }
-    header("Location: clients.php");
+    header("Location: " . getClientRedirectUrl());
     exit;
 }
 
@@ -60,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_embral'])) {
         header("Location: client-pdf.php?id=" . $client_id_to_embral . "&sent=embral");
         exit;
     }
-    header("Location: clients.php");
+    header("Location: " . getClientRedirectUrl());
     exit;
 }
 
@@ -75,14 +87,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_potential'])) 
         $stmt = $pdo->prepare("UPDATE " . TABLE_NAME . "clients SET is_potential = IF(is_potential=1, 0, 1) WHERE id = ?");
         $stmt->execute([$client_id_to_toggle]);
     }
-    header("Location: clients.php");
+    header("Location: " . getClientRedirectUrl());
     exit;
 }
 
-// Fetch All Clients for both Admin and Operator, with responsible operator name
-$sort = $_GET['sort'] ?? 'date';
+// -------------------------------------------------------------
+// FILTER & PAGINATION PARAMETERS (SERVER-SIDE FOR SPEED)
+// -------------------------------------------------------------
+$search = trim($_GET['q'] ?? ($_GET['search'] ?? ''));
+$statusFilterParam = trim($_GET['status'] ?? '');
+$scopeFilterParam = trim($_GET['scope'] ?? 'all');
+$sort = trim($_GET['sort'] ?? 'date');
 $order = isset($_GET['order']) && strtoupper($_GET['order']) === 'ASC' ? 'ASC' : 'DESC';
 
+$perPageParam = trim($_GET['per_page'] ?? '10');
+$perPage = ($perPageParam === 'all') ? 'all' : (in_array(intval($perPageParam), [10, 25, 50, 100]) ? intval($perPageParam) : 10);
+$page = max(1, intval($_GET['page'] ?? 1));
+
+// Build SQL WHERE Conditions
+$where = [];
+$params = [];
+
+// 1. Scope (Apenas os Meus vs Todos)
+if ($scopeFilterParam === 'mine') {
+    $where[] = "c.user_id = :scope_user_id";
+    $params[':scope_user_id'] = $user_id;
+}
+
+// 2. Status Filter
+if (!empty($statusFilterParam)) {
+    $stLower = mb_strtolower($statusFilterParam, 'UTF-8');
+    if ($stLower === 'novo' || $stLower === 'pré-cadastro' || $stLower === 'pre-cadastro') {
+        $where[] = "(c.status = 'Novo' OR c.status = 'Pré-cadastro' OR c.status = 'Pre-cadastro')";
+    } elseif ($stLower === 'atendido') {
+        $where[] = "c.status = 'Atendido'";
+    } elseif ($stLower === 'embral') {
+        $where[] = "c.status = 'Embral'";
+    } elseif ($stLower === 'ativo') {
+        $where[] = "(c.status = 'Ativo' OR c.status IS NULL OR c.status = '')";
+    } elseif ($stLower === 'inativo') {
+        $where[] = "c.status = 'Inativo'";
+    } else {
+        $where[] = "c.status = :status_exact";
+        $params[':status_exact'] = $statusFilterParam;
+    }
+}
+
+// 3. Search text
+if (!empty($search)) {
+    $digits = preg_replace('/\D/', '', $search);
+    $searchConds = [
+        "c.name LIKE :search_term",
+        "c.farm_name LIKE :search_term",
+        "c.city LIKE :search_term",
+        "c.uf LIKE :search_term",
+        "c.email LIKE :search_term",
+        "u.name LIKE :search_term"
+    ];
+    $params[':search_term'] = '%' . $search . '%';
+
+    if (strlen($digits) >= 3) {
+        $searchConds[] = "REPLACE(REPLACE(REPLACE(REPLACE(c.phone, '(', ''), ')', ''), '-', ''), ' ', '') LIKE :search_phone";
+        $params[':search_phone'] = '%' . $digits . '%';
+    }
+
+    $where[] = "(" . implode(" OR ", $searchConds) . ")";
+}
+
+$whereSql = !empty($where) ? ("WHERE " . implode(" AND ", $where)) : "";
+
+// Sort Order
 switch ($sort) {
     case 'name':
         $orderBy = "c.name {$order}, c.id DESC";
@@ -100,21 +174,39 @@ switch ($sort) {
         break;
 }
 
-$stmt = $pdo->prepare("
-    SELECT c.*, u.name as operator_name 
-    FROM " . TABLE_NAME . "clients c 
-    LEFT JOIN " . TABLE_NAME . "users u ON c.user_id = u.id
-    ORDER BY {$orderBy}
-");
-$stmt->execute();
-$clients = $stmt->fetchAll();
+// Count Total Matching Clients
+$countSql = "SELECT COUNT(*) FROM " . TABLE_NAME . "clients c LEFT JOIN " . TABLE_NAME . "users u ON c.user_id = u.id {$whereSql}";
+$stmtCount = $pdo->prepare($countSql);
+$stmtCount->execute($params);
+$totalItems = (int) $stmtCount->fetchColumn();
 
-// Build encrypted pre-registration link for current user
+// Compute Pagination Dimensions
+$limit = ($perPage === 'all') ? max(1, $totalItems) : (int) $perPage;
+$totalPages = ($limit > 0) ? (int) ceil($totalItems / $limit) : 1;
+if ($totalPages < 1) $totalPages = 1;
+if ($page > $totalPages) $page = $totalPages;
+if ($page < 1) $page = 1;
+
+$offset = ($page - 1) * $limit;
+if ($offset < 0) $offset = 0;
+
+// Fetch Paginated Rows Only
+$dataSql = "SELECT c.*, u.name as operator_name 
+            FROM " . TABLE_NAME . "clients c 
+            LEFT JOIN " . TABLE_NAME . "users u ON c.user_id = u.id 
+            {$whereSql} 
+            ORDER BY {$orderBy} " . ($perPage === 'all' ? "" : "LIMIT {$limit} OFFSET {$offset}");
+$stmtData = $pdo->prepare($dataSql);
+$stmtData->execute($params);
+$clients = $stmtData->fetchAll();
+
+$pageStart = $totalItems > 0 ? ($offset + 1) : 0;
+$pageEnd = ($perPage === 'all') ? $totalItems : min($offset + $limit, $totalItems);
+
+// Encrypted pre-registration link for current user
 $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http");
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $precadastroUrl = $protocol . "://" . $host . "/precadastro.php?ref=" . encryptUserId($user_id);
-$statusFilterParam = $_GET['status'] ?? '';
-$scopeFilterParam = $_GET['scope'] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -146,161 +238,186 @@ $scopeFilterParam = $_GET['scope'] ?? '';
             }
         }
     </script>
-    <style>
-        #clientsTable tbody {
-            visibility: hidden;
-        }
-        #clientsTable.ready tbody {
-            visibility: visible;
-        }
-    </style>
 </head>
 
 <body class="bg-brand-50 font-sans leading-normal tracking-normal">
-    <!-- Modal de Aguarde / Loading Overlay -->
-    <div id="clientsLoadingOverlay" class="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-50 flex items-center justify-center transition-opacity duration-200">
-        <div class="bg-white px-6 py-5 rounded-2xl shadow-2xl flex items-center space-x-4 border border-gray-100 max-w-xs sm:max-w-sm">
-            <div class="w-8 h-8 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin flex-shrink-0"></div>
-            <div>
-                <p class="font-bold text-gray-800 text-sm">Carregando dados...</p>
-                <p class="text-xs text-gray-500">Filtrando e organizando a lista</p>
-            </div>
-        </div>
-    </div>
-
     <div class="relative min-h-screen md:flex">
         <?php include '../components/sidebar.php'; ?>
         <div class="flex-1 flex flex-col min-h-screen overflow-hidden">
             <?php include '../components/header.php'; ?>
-            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-brand-50 p-6">
+            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-brand-50 p-4 sm:p-6">
 
                 <div class="flex justify-between items-center mb-6">
-                    <h1 class="text-3xl font-bold text-brand-900">Clientes</h1>
+                    <div>
+                        <h1 class="text-2xl sm:text-3xl font-bold text-brand-900">Clientes</h1>
+                        <p class="text-xs sm:text-sm text-gray-500 mt-0.5">Gerenciamento e relacionamento com clientes.</p>
+                    </div>
                     <a href="client-add.php"
-                        class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-md transition transform hover:-translate-y-0.5 active:translate-y-0 flex items-center cursor-pointer text-sm">
-                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-2 sm:py-2.5 px-4 sm:px-6 rounded-lg shadow-md transition transform hover:-translate-y-0.5 active:translate-y-0 flex items-center cursor-pointer text-xs sm:text-sm">
+                        <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-1.5 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                         </svg>
-                        Novo
+                        Novo Cliente
                     </a>
                 </div>
 
-                <!-- Search & Filters (Search + Scope + Status) -->
-                <div class="mb-6 flex flex-wrap sm:flex-nowrap gap-2 sm:gap-4 items-center">
-                    <div class="relative flex-1 min-w-[200px]">
-                        <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 sm:pl-3 pointer-events-none">
-                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                            </svg>
-                        </span>
-                        <input type="text" id="searchInput"
-                            class="w-full pl-8 sm:pl-10 pr-2.5 sm:pr-4 py-2 sm:py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm bg-white text-xs sm:text-sm"
-                            placeholder="Buscar por nome, data, fazenda, telefone, cidade, UF...">
-                    </div>
+                <!-- Form de Busca e Filtros Rápidos (Server-Side) -->
+                <form method="GET" id="clientsFilterForm" class="mb-6 space-y-3">
+                    <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort); ?>">
+                    <input type="hidden" name="order" value="<?php echo htmlspecialchars($order); ?>">
+                    <input type="hidden" name="page" id="pageInput" value="1">
+                    <input type="hidden" name="per_page" id="perPageHidden" value="<?php echo htmlspecialchars($perPageParam); ?>">
 
-                    <!-- Scope Filter: Apenas os Meus vs Todos do Sistema -->
-                    <div class="w-full sm:w-48">
-                        <div class="relative">
-                            <select id="scopeFilter"
-                                class="w-full pl-2 sm:pl-3 pr-6 sm:pr-8 py-2 sm:py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm bg-white font-medium text-gray-700 text-xs sm:text-sm appearance-none cursor-pointer truncate">
-                                <option value="all" <?php echo $scopeFilterParam === 'all' ? 'selected' : ''; ?>>🌐 Todos do Sistema</option>
-                                <option value="mine" <?php echo $scopeFilterParam === 'mine' ? 'selected' : ''; ?>>👤 Apenas os Meus</option>
-                            </select>
-                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 sm:px-2.5 text-gray-500">
-                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    <div class="flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 items-center">
+                        <!-- Campo de Busca -->
+                        <div class="relative flex-1 min-w-[200px]">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                 </svg>
+                            </span>
+                            <input type="text" name="q" id="searchInput"
+                                value="<?php echo htmlspecialchars($search); ?>"
+                                class="w-full pl-9 pr-8 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm bg-white text-xs sm:text-sm"
+                                placeholder="Buscar por nome, fazenda, telefone, cidade, UF...">
+                            <?php if (!empty($search)): ?>
+                                <button type="button" onclick="clearSearch()"
+                                    class="absolute inset-y-0 right-0 flex items-center pr-2.5 text-gray-400 hover:text-gray-600"
+                                    title="Limpar busca">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+                            <?php endif; ?>
+                        </div>
+
+                        <!-- Filtro de Escopo (Apenas os Meus vs Todos) -->
+                        <div class="w-full sm:w-44">
+                            <div class="relative">
+                                <select name="scope" id="scopeFilter" onchange="submitFilterForm()"
+                                    class="w-full pl-3 pr-8 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm bg-white font-medium text-gray-700 text-xs sm:text-sm appearance-none cursor-pointer truncate">
+                                    <option value="all" <?php echo $scopeFilterParam === 'all' ? 'selected' : ''; ?>>🌐 Todos do Sistema</option>
+                                    <option value="mine" <?php echo $scopeFilterParam === 'mine' ? 'selected' : ''; ?>>👤 Apenas os Meus</option>
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Status Filter -->
-                    <div class="w-full sm:w-44">
-                        <div class="relative">
-                            <select id="statusFilter"
-                                class="w-full pl-2 sm:pl-3 pr-6 sm:pr-8 py-2 sm:py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm bg-white font-medium text-gray-700 text-xs sm:text-sm appearance-none cursor-pointer truncate">
-                                <option value="" <?php echo empty($statusFilterParam) ? 'selected' : ''; ?>>Todos Status</option>
-                                <option value="Novo" <?php echo in_array($statusFilterParam, ['Novo', 'Pré-cadastro']) ? 'selected' : ''; ?>>🟡 Novos</option>
-                                <option value="Atendido" <?php echo $statusFilterParam === 'Atendido' ? 'selected' : ''; ?>>🟣 Atendidos</option>
-                                <option value="Embral" <?php echo $statusFilterParam === 'Embral' ? 'selected' : ''; ?>>🔵 Embral</option>
-                                <option value="Ativo" <?php echo $statusFilterParam === 'Ativo' ? 'selected' : ''; ?>>🟢 Ativos</option>
-                                <option value="Inativo" <?php echo $statusFilterParam === 'Inativo' ? 'selected' : ''; ?>>⚫ Inativos</option>
-                            </select>
-                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 sm:px-2.5 text-gray-500">
-                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                </svg>
+                        <!-- Filtro de Status -->
+                        <div class="w-full sm:w-40">
+                            <div class="relative">
+                                <select name="status" id="statusFilter" onchange="submitFilterForm()"
+                                    class="w-full pl-3 pr-8 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm bg-white font-medium text-gray-700 text-xs sm:text-sm appearance-none cursor-pointer truncate">
+                                    <option value="" <?php echo empty($statusFilterParam) ? 'selected' : ''; ?>>Todos Status</option>
+                                    <option value="Novo" <?php echo in_array($statusFilterParam, ['Novo', 'Pré-cadastro']) ? 'selected' : ''; ?>>🟡 Novos</option>
+                                    <option value="Atendido" <?php echo $statusFilterParam === 'Atendido' ? 'selected' : ''; ?>>🟣 Atendidos</option>
+                                    <option value="Embral" <?php echo $statusFilterParam === 'Embral' ? 'selected' : ''; ?>>🔵 Embral</option>
+                                    <option value="Ativo" <?php echo $statusFilterParam === 'Ativo' ? 'selected' : ''; ?>>🟢 Ativos</option>
+                                    <option value="Inativo" <?php echo $statusFilterParam === 'Inativo' ? 'selected' : ''; ?>>⚫ Inativos</option>
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <div class="bg-white shadow-md rounded-lg overflow-hidden">
+                        <!-- Botão Limpar Filtros -->
+                        <?php if (!empty($search) || !empty($statusFilterParam) || $scopeFilterParam === 'mine'): ?>
+                            <a href="clients.php"
+                                class="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition shadow-xs flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                                title="Limpar todos os filtros">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                                Limpar
+                            </a>
+                        <?php endif; ?>
+                    </div>
+                </form>
+
+                <!-- Tabela de Clientes -->
+                <div class="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
                     <div class="overflow-x-auto">
                         <table class="min-w-full leading-normal" id="clientsTable">
                             <thead>
                                 <tr>
-                                    <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition select-none sort-header"
-                                        data-sort="name" title="Clique para ordenar por Nome">
+                                    <!-- Coluna Nome -->
+                                    <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition select-none"
+                                        onclick="applySort('name')">
                                         <div class="flex items-center space-x-1">
                                             <span>Nome do Cliente</span>
-                                            <span class="sort-icon text-gray-400 text-xs">↕</span>
+                                            <span class="text-xs <?php echo $sort === 'name' ? 'text-brand-600 font-bold' : 'text-gray-400'; ?>">
+                                                <?php echo $sort === 'name' ? ($order === 'ASC' ? '▲' : '▼') : '↕'; ?>
+                                            </span>
                                         </div>
                                     </th>
-                                    <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition select-none sort-header"
-                                        data-sort="date" title="Clique para ordenar por Data/Hora de Cadastro">
+
+                                    <!-- Coluna Cadastro -->
+                                    <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition select-none"
+                                        onclick="applySort('date')">
                                         <div class="flex items-center space-x-1">
                                             <span>Cadastro</span>
-                                            <span class="sort-icon text-gray-400 text-xs">↕</span>
+                                            <span class="text-xs <?php echo $sort === 'date' ? 'text-brand-600 font-bold' : 'text-gray-400'; ?>">
+                                                <?php echo $sort === 'date' ? ($order === 'ASC' ? '▲' : '▼') : '↕'; ?>
+                                            </span>
                                         </div>
                                     </th>
-                                    <th
-                                        class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                        Contato</th>
-                                    <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition select-none sort-header"
-                                        data-sort="city" title="Clique para ordenar por Cidade / UF">
+
+                                    <!-- Coluna Contato -->
+                                    <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                        Contato
+                                    </th>
+
+                                    <!-- Coluna Cidade/UF -->
+                                    <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition select-none"
+                                        onclick="applySort('city')">
                                         <div class="flex items-center space-x-1">
                                             <span>Cidade / UF</span>
-                                            <span class="sort-icon text-gray-400 text-xs">↕</span>
+                                            <span class="text-xs <?php echo $sort === 'city' ? 'text-brand-600 font-bold' : 'text-gray-400'; ?>">
+                                                <?php echo $sort === 'city' ? ($order === 'ASC' ? '▲' : '▼') : '↕'; ?>
+                                            </span>
                                         </div>
                                     </th>
-                                    <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition select-none sort-header"
-                                        data-sort="status" title="Clique para ordenar por Status">
+
+                                    <!-- Coluna Status -->
+                                    <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition select-none"
+                                        onclick="applySort('status')">
                                         <div class="flex items-center space-x-1">
                                             <span>Status</span>
-                                            <span class="sort-icon text-gray-400 text-xs">↕</span>
+                                            <span class="text-xs <?php echo $sort === 'status' ? 'text-brand-600 font-bold' : 'text-gray-400'; ?>">
+                                                <?php echo $sort === 'status' ? ($order === 'ASC' ? '▲' : '▼') : '↕'; ?>
+                                            </span>
                                         </div>
                                     </th>
-                                    <th
-                                        class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                        Ações</th>
+
+                                    <!-- Coluna Ações -->
+                                    <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                        Ações
+                                    </th>
                                 </tr>
                             </thead>
-                            <tbody id="clientsTableBody">
+                            <tbody>
                                 <?php if (count($clients) > 0): ?>
                                     <?php foreach ($clients as $client): 
                                         $canEdit = canEditClient($client['user_id']);
                                         $isMine = ((int)$client['user_id'] === (int)$user_id);
                                     ?>
-                                        <tr class="hover:bg-gray-50 transition client-row"
-                                            data-name="<?php echo htmlspecialchars(mb_strtolower($client['name'], 'UTF-8')); ?>"
-                                            data-date="<?php echo !empty($client['created_at']) ? strtotime($client['created_at']) : (int) $client['id']; ?>"
-                                            data-city="<?php echo htmlspecialchars(mb_strtolower(($client['city'] ?? '') . ' ' . ($client['uf'] ?? ''), 'UTF-8')); ?>"
-                                            data-status="<?php echo htmlspecialchars(mb_strtolower($client['status'] ?? '', 'UTF-8')); ?>"
-                                            data-phone="<?php echo preg_replace('/[^0-9]/', '', $client['phone'] ?? ''); ?>"
-                                            data-user-id="<?php echo (int)$client['user_id']; ?>"
-                                            data-is-mine="<?php echo $isMine ? '1' : '0'; ?>">
-                                            <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                                        <tr class="hover:bg-gray-50 transition border-b border-gray-100">
+                                            <!-- 1. Nome / Potencial / Responsável -->
+                                            <td class="px-5 py-4 bg-white text-sm">
                                                 <div class="flex items-center">
                                                     <div class="flex-shrink-0 mr-3">
                                                         <?php if ($canEdit): ?>
-                                                            <!-- Toggle Potential Button -->
                                                             <form method="POST" class="inline flex items-center">
-                                                                <input type="hidden" name="client_id"
-                                                                    value="<?php echo $client['id']; ?>">
+                                                                <input type="hidden" name="client_id" value="<?php echo $client['id']; ?>">
                                                                 <input type="hidden" name="toggle_potential" value="1">
                                                                 <button type="submit"
                                                                     class="p-1 rounded-full hover:bg-amber-50 transition <?php echo !empty($client['is_potential']) ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-500'; ?>"
@@ -327,30 +444,31 @@ $scopeFilterParam = $_GET['scope'] ?? '';
                                                     <div>
                                                         <div class="flex items-center flex-wrap gap-1.5">
                                                             <a href="client-details.php?id=<?php echo $client['id']; ?>"
-                                                                class="text-gray-900 hover:text-brand-600 font-semibold hover:underline client-name inline-block"
+                                                                class="text-gray-900 hover:text-brand-600 font-semibold hover:underline inline-block"
                                                                 title="Ver detalhes de <?php echo htmlspecialchars($client['name']); ?>">
                                                                 <?php echo htmlspecialchars($client['name']); ?>
                                                             </a>
-                                                            <?php if ($isMine): ?>
-                                                                <span class="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold border border-emerald-200" title="Cliente sob sua responsabilidade">
-                                                                    👤 Meu Cliente
-                                                                </span>
-                                                            <?php else: ?>
-                                                                <span class="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold border border-slate-300" title="Operador Responsável: <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro'); ?>">
-                                                                    👤 <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Operador'); ?>
+                                                            <?php if (!$isMine): ?>
+                                                                <span class="inline-flex items-center justify-center text-red-500 hover:text-red-700 transition shrink-0 select-none" title="Cliente de outro usuário (Responsável: <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Usuário'); ?>)">
+                                                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                                                        <circle cx="9" cy="7" r="4"></circle>
+                                                                        <line x1="3" y1="3" x2="21" y2="21" stroke-width="2.5"></line>
+                                                                    </svg>
                                                                 </span>
                                                             <?php endif; ?>
                                                         </div>
                                                         <?php if (!empty($client['farm_name'])): ?>
-                                                            <p class="text-xs text-brand-700 font-medium client-farm">
+                                                            <p class="text-xs text-brand-700 font-medium mt-0.5">
                                                                 🏡 <?php echo htmlspecialchars($client['farm_name']); ?>
                                                             </p>
                                                         <?php endif; ?>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td
-                                                class="px-5 py-5 border-b border-gray-200 bg-white text-sm whitespace-nowrap client-date">
+
+                                            <!-- 2. Data de Cadastro -->
+                                            <td class="px-5 py-4 bg-white text-sm whitespace-nowrap">
                                                 <?php if (!empty($client['created_at'])): ?>
                                                     <div class="text-gray-900 font-medium">
                                                         <?php echo date('d/m/Y', strtotime($client['created_at'])); ?>
@@ -362,11 +480,13 @@ $scopeFilterParam = $_GET['scope'] ?? '';
                                                     <span class="text-gray-400" title="Data não disponível">-</span>
                                                 <?php endif; ?>
                                             </td>
-                                            <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+
+                                            <!-- 3. Contato (WhatsApp / Email) -->
+                                            <td class="px-5 py-4 bg-white text-sm">
                                                 <?php if (!empty($client['phone'])): ?>
                                                     <a href="https://wa.me/+55<?php echo preg_replace('/[^0-9]/', '', $client['phone']); ?>"
                                                         target="_blank"
-                                                        class="text-green-600 hover:text-green-800 font-semibold hover:underline flex items-center client-phone mb-1"
+                                                        class="text-green-600 hover:text-green-800 font-semibold hover:underline flex items-center mb-1"
                                                         title="Abrir conversa no WhatsApp">
                                                         <svg class="w-4 h-4 mr-1.5 fill-current text-green-500 flex-shrink-0"
                                                             viewBox="0 0 24 24">
@@ -378,7 +498,7 @@ $scopeFilterParam = $_GET['scope'] ?? '';
                                                 <?php endif; ?>
                                                 <?php if (!empty($client['email'])): ?>
                                                     <a href="mailto:<?php echo htmlspecialchars($client['email']); ?>"
-                                                        class="text-blue-600 hover:text-blue-800 text-xs flex items-center client-email hover:underline truncate max-w-xs"
+                                                        class="text-blue-600 hover:text-blue-800 text-xs flex items-center hover:underline truncate max-w-xs"
                                                         title="Enviar e-mail para <?php echo htmlspecialchars($client['email']); ?>">
                                                         <svg class="w-3.5 h-3.5 mr-1 text-blue-500 flex-shrink-0" fill="none"
                                                             stroke="currentColor" viewBox="0 0 24 24">
@@ -390,50 +510,49 @@ $scopeFilterParam = $_GET['scope'] ?? '';
                                                     </a>
                                                 <?php endif; ?>
                                                 <?php if (empty($client['phone']) && empty($client['email'])): ?>
-                                                    <span class="text-gray-400 client-phone">-</span>
+                                                    <span class="text-gray-400">-</span>
                                                 <?php endif; ?>
                                             </td>
-                                            <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                                                <span class="relative client-location text-gray-700">
+
+                                            <!-- 4. Localização -->
+                                            <td class="px-5 py-4 bg-white text-sm">
+                                                <span class="text-gray-700">
                                                     <?php
                                                     $loc = array_filter([$client['city'] ?? '', $client['uf'] ?? '']);
                                                     echo htmlspecialchars(!empty($loc) ? implode(' / ', $loc) : 'N/A');
                                                     ?>
                                                 </span>
                                             </td>
-                                            <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                                                <span class="client-status">
-                                                    <?php if (($client['status'] ?? '') === 'Embral'): ?>
-                                                        <span
-                                                            class="bg-blue-100 text-blue-800 text-xs px-3 py-1 rounded-full font-bold border border-blue-300 inline-block">
-                                                            Embral
-                                                        </span>
-                                                    <?php elseif (($client['status'] ?? '') === 'Atendido'): ?>
-                                                        <span
-                                                            class="bg-purple-100 text-purple-800 text-xs px-3 py-1 rounded-full font-bold border border-purple-300 inline-block">
-                                                            Atendido
-                                                        </span>
-                                                    <?php elseif (($client['status'] ?? '') === 'Inativo'): ?>
-                                                        <span
-                                                            class="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full font-bold border border-gray-300 inline-block">
-                                                            Inativo
-                                                        </span>
-                                                    <?php elseif (in_array($client['status'] ?? '', ['Novo', 'Pré-cadastro'])): ?>
-                                                        <span
-                                                            class="bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-bold border border-amber-300 inline-block">
-                                                            Novo
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span
-                                                            class="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-bold border border-green-300 inline-block">
-                                                            Ativo
-                                                        </span>
-                                                    <?php endif; ?>
-                                                </span>
+
+                                            <!-- 5. Status Badge -->
+                                            <td class="px-5 py-4 bg-white text-sm">
+                                                <?php if (($client['status'] ?? '') === 'Embral'): ?>
+                                                    <span class="bg-blue-100 text-blue-800 text-xs px-3 py-1 rounded-full font-bold border border-blue-300 inline-block">
+                                                        Embral
+                                                    </span>
+                                                <?php elseif (($client['status'] ?? '') === 'Atendido'): ?>
+                                                    <span class="bg-purple-100 text-purple-800 text-xs px-3 py-1 rounded-full font-bold border border-purple-300 inline-block">
+                                                        Atendido
+                                                    </span>
+                                                <?php elseif (($client['status'] ?? '') === 'Inativo'): ?>
+                                                    <span class="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full font-bold border border-gray-300 inline-block">
+                                                        Inativo
+                                                    </span>
+                                                <?php elseif (in_array($client['status'] ?? '', ['Novo', 'Pré-cadastro'])): ?>
+                                                    <span class="bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-bold border border-amber-300 inline-block">
+                                                        Novo
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-bold border border-green-300 inline-block">
+                                                        Ativo
+                                                    </span>
+                                                <?php endif; ?>
                                             </td>
-                                            <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                                                <div class="flex items-center space-x-2.5">
-                                                    <!-- 1. Mapa -->
+
+                                            <!-- 6. Ações -->
+                                            <td class="px-5 py-4 bg-white text-sm whitespace-nowrap">
+                                                <div class="flex items-center space-x-2">
+                                                    <!-- Mapa -->
                                                     <a href="view-map.php?client_id=<?php echo $client['id']; ?>"
                                                         class="text-emerald-600 hover:text-emerald-800 p-1 hover:bg-emerald-50 rounded transition" title="Ver no Mapa de Clientes">
                                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -442,7 +561,7 @@ $scopeFilterParam = $_GET['scope'] ?? '';
                                                         </svg>
                                                     </a>
 
-                                                    <!-- 2. Agendar Compromisso -->
+                                                    <!-- Agendar Compromisso -->
                                                     <a href="schedule-add.php?client_id=<?php echo $client['id']; ?>"
                                                         class="text-amber-600 hover:text-amber-800 p-1 hover:bg-amber-50 rounded transition" title="Agendar Compromisso">
                                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -452,33 +571,29 @@ $scopeFilterParam = $_GET['scope'] ?? '';
                                                         </svg>
                                                     </a>
 
-                                                    <!-- 3. Ficha PDF -->
+                                                    <!-- Ficha PDF -->
                                                     <a href="client-pdf.php?id=<?php echo $client['id']; ?>" target="_blank"
                                                         class="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition"
                                                         title="Gerar PDF / Imprimir Ficha">
-                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                                            viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                stroke-width="2"
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                                 d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z">
                                                             </path>
                                                         </svg>
                                                     </a>
 
                                                     <?php if ($canEdit): ?>
-                                                        <!-- 4. Editar (Somente Dono ou Admin) -->
+                                                        <!-- Editar -->
                                                         <a href="client-edit.php?id=<?php echo $client['id']; ?>"
                                                             class="text-yellow-600 hover:text-yellow-800 p-1 hover:bg-yellow-50 rounded transition" title="Editar Informações">
-                                                            <svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                                                viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round"
-                                                                    stroke-width="2"
+                                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                                     d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
                                                                 </path>
                                                             </svg>
                                                         </a>
 
-                                                        <!-- Attend Client Button (Novo -> Atendido) -->
+                                                        <!-- Marcar Atendido (Novo -> Atendido) -->
                                                         <?php if (in_array($client['status'] ?? '', ['Novo', 'Pré-cadastro'])): ?>
                                                             <?php
                                                             $rowPhoneClean = preg_replace('/[^0-9]/', '', $client['phone'] ?? '');
@@ -487,34 +602,28 @@ $scopeFilterParam = $_GET['scope'] ?? '';
                                                             ?>
                                                             <form method="POST" class="inline"
                                                                 onsubmit="if('<?php echo addslashes($rowWaApprovalUrl); ?>'){ window.open('<?php echo addslashes($rowWaApprovalUrl); ?>', '_blank'); }">
-                                                                <input type="hidden" name="client_id"
-                                                                    value="<?php echo $client['id']; ?>">
+                                                                <input type="hidden" name="client_id" value="<?php echo $client['id']; ?>">
                                                                 <input type="hidden" name="attend_client" value="1">
                                                                 <button type="submit" class="text-purple-600 hover:text-purple-800 p-1 hover:bg-purple-50 rounded transition cursor-pointer"
                                                                     title="Marcar como Atendido (Alterar status para Atendido e abrir WhatsApp)">
-                                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                                                        viewBox="0 0 24 24">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                                                            stroke-width="2"
+                                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                                             d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                                                     </svg>
                                                                 </button>
                                                             </form>
                                                         <?php endif; ?>
 
-                                                        <!-- Send to Embral Button (Atendido -> Embral) -->
+                                                        <!-- Enviar Embral (Atendido -> Embral) -->
                                                         <?php if (($client['status'] ?? '') === 'Atendido'): ?>
                                                             <form method="POST" class="inline"
                                                                 onsubmit="window.open('client-pdf.php?id=<?php echo $client['id']; ?>&sent=embral', '_blank');">
-                                                                <input type="hidden" name="client_id"
-                                                                    value="<?php echo $client['id']; ?>">
+                                                                <input type="hidden" name="client_id" value="<?php echo $client['id']; ?>">
                                                                 <input type="hidden" name="send_embral" value="1">
                                                                 <button type="submit" class="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition cursor-pointer"
                                                                     title="Enviar dados para Embral (Alterar status para Embral e abrir Ficha/WhatsApp)">
-                                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                                                        viewBox="0 0 24 24">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                                                            stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
+                                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
                                                                         </path>
                                                                     </svg>
                                                                 </button>
@@ -523,15 +632,12 @@ $scopeFilterParam = $_GET['scope'] ?? '';
 
                                                         <!-- Excluir -->
                                                         <form method="POST" onsubmit="confirmDelete(event)" class="inline">
-                                                            <input type="hidden" name="client_id"
-                                                                value="<?php echo $client['id']; ?>">
+                                                            <input type="hidden" name="client_id" value="<?php echo $client['id']; ?>">
                                                             <input type="hidden" name="delete_client" value="1">
                                                             <button type="submit" class="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition cursor-pointer"
                                                                 title="Excluir">
-                                                                <svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                                                    viewBox="0 0 24 24">
-                                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                                        stroke-width="2"
+                                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
                                                                     </path>
                                                                 </svg>
@@ -544,519 +650,182 @@ $scopeFilterParam = $_GET['scope'] ?? '';
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="7" class="px-5 py-5 border-b border-gray-200 bg-white text-sm text-center">
-                                            Nenhum cliente encontrado.
+                                        <td colspan="6" class="px-5 py-12 bg-white text-center text-gray-500">
+                                            <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
+                                                </path>
+                                            </svg>
+                                            <p class="font-bold text-gray-700 text-base">Nenhum cliente encontrado</p>
+                                            <p class="text-xs text-gray-400 mt-1">Tente ajustar o termo de pesquisa ou o filtro de status.</p>
+                                            <?php if (!empty($search) || !empty($statusFilterParam) || $scopeFilterParam === 'mine'): ?>
+                                                <a href="clients.php" class="inline-block mt-3 bg-brand-500 hover:bg-brand-600 text-white font-bold py-1.5 px-4 rounded-lg text-xs transition">
+                                                    Limpar Filtros
+                                                </a>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
                         </table>
-                        <div id="noResults" class="hidden px-5 py-8 bg-white text-sm text-center text-gray-500">
-                            <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
-                                </path>
-                            </svg>
-                            <p class="font-medium text-gray-600">Nenhum cliente encontrado para os critérios de busca.
-                            </p>
-                            <p class="text-xs text-gray-400 mt-1">Tente ajustar o termo de pesquisa ou o filtro de
-                                status.</p>
-                        </div>
+                    </div>
 
-                        <!-- Pagination Footer -->
-                        <div id="paginationContainer"
-                            class="px-5 py-4 bg-white border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <!-- Rodapé de Paginação Server-Side -->
+                    <?php if ($totalItems > 0): ?>
+                        <div class="px-5 py-4 bg-white border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
                             <!-- Info & Per-Page Selector -->
-                            <div class="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                                <span id="paginationInfo">
-                                    Mostrando <strong class="text-gray-900 font-semibold" id="pageStart">1</strong> a
-                                    <strong class="text-gray-900 font-semibold" id="pageEnd">10</strong> de <strong
-                                        class="text-gray-900 font-semibold" id="totalItems">0</strong> clientes
+                            <div class="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-gray-600">
+                                <span>
+                                    Mostrando <strong class="text-gray-900 font-semibold"><?php echo $pageStart; ?></strong> a
+                                    <strong class="text-gray-900 font-semibold"><?php echo $pageEnd; ?></strong> de
+                                    <strong class="text-gray-900 font-semibold"><?php echo $totalItems; ?></strong> clientes
                                 </span>
                                 <div class="flex items-center gap-1.5 text-xs text-gray-500">
                                     <label for="perPageSelect" class="whitespace-nowrap font-medium">Por página:</label>
-                                    <select id="perPageSelect"
-                                        class="border border-gray-300 rounded-md px-2.5 py-1 bg-white text-gray-700 text-xs focus:ring-2 focus:ring-brand-500 focus:outline-none shadow-sm cursor-pointer">
-                                        <option value="10" selected>10</option>
-                                        <option value="25">25</option>
-                                        <option value="50">50</option>
-                                        <option value="100">100</option>
-                                        <option value="all">Todos</option>
+                                    <select id="perPageSelect" onchange="changePerPage(this.value)"
+                                        class="border border-gray-300 rounded-md px-2 py-1 bg-white text-gray-700 text-xs focus:ring-2 focus:ring-brand-500 focus:outline-none shadow-sm cursor-pointer">
+                                        <option value="10" <?php echo $perPageParam === '10' ? 'selected' : ''; ?>>10</option>
+                                        <option value="25" <?php echo $perPageParam === '25' ? 'selected' : ''; ?>>25</option>
+                                        <option value="50" <?php echo $perPageParam === '50' ? 'selected' : ''; ?>>50</option>
+                                        <option value="100" <?php echo $perPageParam === '100' ? 'selected' : ''; ?>>100</option>
+                                        <option value="all" <?php echo $perPageParam === 'all' ? 'selected' : ''; ?>>Todos</option>
                                     </select>
                                 </div>
                             </div>
 
                             <!-- Page Navigation Buttons -->
-                            <div class="flex items-center space-x-1" id="paginationButtons">
-                                <!-- Rendered dynamically via JS -->
-                            </div>
+                            <?php if ($totalPages > 1 && $perPage !== 'all'): ?>
+                                <div class="flex items-center space-x-1">
+                                    <!-- Botão Anterior -->
+                                    <?php if ($page > 1): ?>
+                                        <button type="button" onclick="goToPage(<?php echo $page - 1; ?>)"
+                                            class="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-100 cursor-pointer shadow-sm transition flex items-center">
+                                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                            </svg>
+                                            Anterior
+                                        </button>
+                                    <?php else: ?>
+                                        <span class="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed flex items-center">
+                                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                            </svg>
+                                            Anterior
+                                        </span>
+                                    <?php endif; ?>
+
+                                    <!-- Botões Numéricos -->
+                                    <?php
+                                    $maxVisible = 5;
+                                    $startP = max(1, $page - 2);
+                                    $endP = min($totalPages, $startP + $maxVisible - 1);
+                                    if ($endP - $startP < $maxVisible - 1) {
+                                        $startP = max(1, $endP - $maxVisible + 1);
+                                    }
+
+                                    if ($startP > 1) {
+                                        echo '<button type="button" onclick="goToPage(1)" class="px-3 py-1.5 text-xs font-bold rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 shadow-sm transition cursor-pointer">1</button>';
+                                        if ($startP > 2) {
+                                            echo '<span class="px-1.5 py-1 text-xs text-gray-400">...</span>';
+                                        }
+                                    }
+
+                                    for ($p = $startP; $p <= $endP; $p++) {
+                                        $isActive = ($p === $page);
+                                        if ($isActive) {
+                                            echo '<span class="px-3 py-1.5 text-xs font-bold rounded-md border bg-brand-600 text-white border-brand-600 shadow-sm">' . $p . '</span>';
+                                        } else {
+                                            echo '<button type="button" onclick="goToPage(' . $p . ')" class="px-3 py-1.5 text-xs font-bold rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 shadow-sm transition cursor-pointer">' . $p . '</button>';
+                                        }
+                                    }
+
+                                    if ($endP < $totalPages) {
+                                        if ($endP < $totalPages - 1) {
+                                            echo '<span class="px-1.5 py-1 text-xs text-gray-400">...</span>';
+                                        }
+                                        echo '<button type="button" onclick="goToPage(' . $totalPages . ')" class="px-3 py-1.5 text-xs font-bold rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 shadow-sm transition cursor-pointer">' . $totalPages . '</button>';
+                                    }
+                                    ?>
+
+                                    <!-- Botão Próximo -->
+                                    <?php if ($page < $totalPages): ?>
+                                        <button type="button" onclick="goToPage(<?php echo $page + 1; ?>)"
+                                            class="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-100 cursor-pointer shadow-sm transition flex items-center">
+                                            Próximo
+                                            <svg class="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                            </svg>
+                                        </button>
+                                    <?php else: ?>
+                                        <span class="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed flex items-center">
+                                            Próximo
+                                            <svg class="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                            </svg>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
                         </div>
-                    </div>
+                    <?php endif; ?>
                 </div>
 
             </main>
         </div>
     </div>
 
-    <!-- Filter, Sorting & Pagination Script -->
+    <!-- Scripts de Interação Ultra Rápidos -->
     <script>
-        let currentPage = 1;
-        let perPage = 10;
-        let filteredRows = [];
+        let searchDebounceTimer = null;
 
-        let currentSort = '<?php echo htmlspecialchars($sort); ?>';
-        let currentOrder = '<?php echo htmlspecialchars($order); ?>';
-
-        const STORAGE_KEY_STATUS = 'crm_clients_filter_status';
-        const STORAGE_KEY_SCOPE = 'crm_clients_filter_scope';
-        const STORAGE_KEY_SEARCH = 'crm_clients_filter_search';
-        const STORAGE_KEY_PER_PAGE = 'crm_clients_filter_per_page';
-
-        function normalizeText(str) {
-            if (!str) return '';
-            return str.toString()
-                .toLowerCase()
-                .normalize('NFD')
-                .replace(/[\u0300-\u036f]/g, '')
-                .trim();
+        function submitFilterForm() {
+            document.getElementById('pageInput').value = '1';
+            document.getElementById('clientsFilterForm').submit();
         }
 
-        function matchPhone(rawDigits, formattedText, searchRaw) {
-            if (!rawDigits && !formattedText) return false;
-
-            const searchDigits = (searchRaw || '').replace(/\D/g, '');
-            if (searchDigits.length >= 3) {
-                // Remove Brazilian country code 55 if present in search (e.g. +55 51 9969-5383 -> 555199695383 -> 5199695383)
-                let searchWithout55 = searchDigits;
-                if (searchDigits.startsWith('55') && searchDigits.length >= 10) {
-                    searchWithout55 = searchDigits.substring(2);
-                }
-
-                let rowDigits = (rawDigits || '').replace(/\D/g, '');
-                if (rowDigits.startsWith('55') && rowDigits.length >= 12) {
-                    rowDigits = rowDigits.substring(2);
-                }
-
-                if (rowDigits) {
-                    if (rowDigits.includes(searchDigits)) return true;
-                    if (rowDigits.includes(searchWithout55)) return true;
-                    if (searchDigits.includes(rowDigits)) return true;
-                    if (('55' + rowDigits).includes(searchDigits)) return true;
-
-                    // Handle 8-digit vs 9-digit numbers (DDD + 8 digits vs DDD + 9 digits)
-                    if (rowDigits.length === 11 && searchWithout55.length === 10) {
-                        const ddd = rowDigits.substring(0, 2);
-                        const rest = rowDigits.substring(3);
-                        if ((ddd + rest).includes(searchWithout55)) return true;
-                    }
-                    if (rowDigits.length === 10 && searchWithout55.length === 11) {
-                        const ddd = searchWithout55.substring(0, 2);
-                        const rest = searchWithout55.substring(3);
-                        if (rowDigits.includes(ddd + rest)) return true;
-                    }
-                }
-            }
-
-            // Direct substring in formatted text (e.g. searching "9969-5383" or "(51)")
-            const normSearch = normalizeText(searchRaw);
-            const normFormatted = normalizeText(formattedText);
-            if (normFormatted && normFormatted.includes(normSearch)) {
-                return true;
-            }
-
-            return false;
+        function clearSearch() {
+            document.getElementById('searchInput').value = '';
+            submitFilterForm();
         }
 
-        function updateSortIcons() {
-            const sortHeaders = document.querySelectorAll('.sort-header');
-            sortHeaders.forEach(header => {
-                const col = header.getAttribute('data-sort');
-                const iconSpan = header.querySelector('.sort-icon');
-                if (col === currentSort) {
-                    header.classList.add('bg-brand-100', 'text-brand-900');
-                    iconSpan.className = 'sort-icon text-brand-600 font-bold ml-1';
-                    iconSpan.textContent = currentOrder === 'ASC' ? '▲' : '▼';
-                } else {
-                    header.classList.remove('bg-brand-100', 'text-brand-900');
-                    iconSpan.className = 'sort-icon text-gray-400 text-xs ml-1';
-                    iconSpan.textContent = '⇅';
-                }
-            });
-        }
+        function applySort(col) {
+            const form = document.getElementById('clientsFilterForm');
+            const currentSort = '<?php echo htmlspecialchars($sort); ?>';
+            const currentOrder = '<?php echo htmlspecialchars($order); ?>';
 
-        function sortTable(col, order) {
-            const tableBody = document.getElementById('clientsTableBody');
-            const rows = Array.from(tableBody.querySelectorAll('.client-row'));
-
-            rows.sort((a, b) => {
-                let valA = a.getAttribute('data-' + col) || '';
-                let valB = b.getAttribute('data-' + col) || '';
-
-                if (col === 'date') {
-                    valA = parseInt(valA, 10) || 0;
-                    valB = parseInt(valB, 10) || 0;
-                    return order === 'ASC' ? valA - valB : valB - valA;
-                } else {
-                    return order === 'ASC'
-                        ? valA.localeCompare(valB, 'pt-BR', { sensitivity: 'base' })
-                        : valB.localeCompare(valA, 'pt-BR', { sensitivity: 'base' });
-                }
-            });
-
-            rows.forEach(row => tableBody.appendChild(row));
-
-            currentSort = col;
-            currentOrder = order;
-            updateSortIcons();
-
-            // Update URL parameter without reload
-            const url = new URL(window.location);
-            url.searchParams.set('sort', col);
-            url.searchParams.set('order', order);
-            window.history.replaceState({}, '', url);
-
-            // Re-render pagination with sorted DOM order
-            currentPage = 1;
-            renderPagination();
-        }
-
-        function getMatchingRows() {
-            const searchInput = document.getElementById('searchInput');
-            const statusFilter = document.getElementById('statusFilter');
-            const scopeFilter = document.getElementById('scopeFilter');
-
-            const searchRaw = searchInput ? searchInput.value.trim() : '';
-            const searchNorm = normalizeText(searchRaw);
-            const selectedStatus = statusFilter ? statusFilter.value.toLowerCase().trim() : '';
-            const selectedScope = scopeFilter ? scopeFilter.value : 'all';
-            const rows = Array.from(document.querySelectorAll('.client-row'));
-
-            return rows.filter(row => {
-                // Scope match logic (mine vs all)
-                if (selectedScope === 'mine' && row.getAttribute('data-is-mine') !== '1') {
-                    return false;
-                }
-
-                const name = normalizeText(row.querySelector('.client-name') ? row.querySelector('.client-name').textContent : '');
-                const farm = normalizeText(row.querySelector('.client-farm') ? row.querySelector('.client-farm').textContent : '');
-                const date = normalizeText(row.querySelector('.client-date') ? row.querySelector('.client-date').textContent : '');
-                const email = normalizeText(row.querySelector('.client-email') ? row.querySelector('.client-email').textContent : '');
-                const location = normalizeText(row.querySelector('.client-location') ? row.querySelector('.client-location').textContent : '');
-                const statusEl = row.querySelector('.client-status');
-                const status = normalizeText(statusEl ? statusEl.textContent : '');
-
-                const phoneDigits = row.getAttribute('data-phone') || '';
-                const phoneFormatted = row.querySelector('.client-phone') ? row.querySelector('.client-phone').textContent : '';
-
-                // Status match logic
-                let statusMatches = true;
-                if (selectedStatus !== '') {
-                    if (selectedStatus === 'novo') {
-                        statusMatches = status.includes('novo') || status.includes('pre-cadastro') || status.includes('precadastro');
-                    } else if (selectedStatus === 'atendido') {
-                        statusMatches = status.includes('atendido');
-                    } else if (selectedStatus === 'embral') {
-                        statusMatches = status.includes('embral');
-                    } else if (selectedStatus === 'ativo') {
-                        statusMatches = status.includes('ativo');
-                    } else if (selectedStatus === 'inativo') {
-                        statusMatches = status.includes('inativo');
-                    } else {
-                        statusMatches = status.includes(selectedStatus);
-                    }
-                }
-
-                // Text & Phone search match logic
-                let textMatches = true;
-                if (searchNorm !== '') {
-                    textMatches = name.includes(searchNorm) ||
-                        farm.includes(searchNorm) ||
-                        date.includes(searchNorm) ||
-                        email.includes(searchNorm) ||
-                        location.includes(searchNorm) ||
-                        status.includes(searchNorm) ||
-                        matchPhone(phoneDigits, phoneFormatted, searchRaw);
-                }
-
-                return statusMatches && textMatches;
-            });
-        }
-
-        function renderPagination() {
-            const allRows = Array.from(document.querySelectorAll('.client-row'));
-            filteredRows = getMatchingRows();
-            const total = filteredRows.length;
-            const noResults = document.getElementById('noResults');
-            const paginationContainer = document.getElementById('paginationContainer');
-
-            // Hide all rows initially
-            allRows.forEach(r => r.style.display = 'none');
-
-            if (total === 0) {
-                if (noResults) noResults.classList.remove('hidden');
-                if (paginationContainer) paginationContainer.classList.add('hidden');
-                return;
-            }
-
-            if (noResults) noResults.classList.add('hidden');
-            if (paginationContainer) paginationContainer.classList.remove('hidden');
-
-            const limit = perPage === 'all' ? total : parseInt(perPage, 10);
-            const totalPages = Math.ceil(total / limit) || 1;
-
-            if (currentPage > totalPages) currentPage = totalPages;
-            if (currentPage < 1) currentPage = 1;
-
-            const startIndex = (currentPage - 1) * limit;
-            const endIndex = perPage === 'all' ? total : Math.min(startIndex + limit, total);
-
-            // Display matching page slice
-            for (let i = startIndex; i < endIndex; i++) {
-                if (filteredRows[i]) {
-                    filteredRows[i].style.display = '';
-                }
-            }
-
-            // Update counter info
-            const pageStartEl = document.getElementById('pageStart');
-            const pageEndEl = document.getElementById('pageEnd');
-            const totalItemsEl = document.getElementById('totalItems');
-            if (pageStartEl) pageStartEl.textContent = total > 0 ? (startIndex + 1) : 0;
-            if (pageEndEl) pageEndEl.textContent = endIndex;
-            if (totalItemsEl) totalItemsEl.textContent = total;
-
-            // Render page buttons
-            renderButtons(totalPages);
-        }
-
-        function goToPage(page) {
-            currentPage = page;
-            renderPagination();
-            const table = document.getElementById('clientsTable');
-            if (table) {
-                table.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
-        }
-
-        function createPageBtn(pageNumber) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            const isActive = (pageNumber === currentPage);
-            btn.className = `px-3 py-1.5 text-xs font-bold rounded-md border ${isActive ? 'bg-brand-600 text-white border-brand-600 shadow-sm' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100 shadow-sm'} transition cursor-pointer`;
-            btn.textContent = pageNumber;
-            if (!isActive) {
-                btn.onclick = () => goToPage(pageNumber);
-            }
-            return btn;
-        }
-
-        function renderButtons(totalPages) {
-            const btnContainer = document.getElementById('paginationButtons');
-            if (!btnContainer) return;
-            btnContainer.innerHTML = '';
-
-            if (totalPages <= 1 && perPage === 'all') {
-                return;
-            }
-
-            // Previous Button
-            const prevBtn = document.createElement('button');
-            prevBtn.type = 'button';
-            prevBtn.className = `px-3 py-1.5 text-xs font-semibold rounded-md border ${currentPage === 1 ? 'border-gray-200 text-gray-400 cursor-not-allowed bg-gray-50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-100 cursor-pointer shadow-sm'} transition flex items-center`;
-            prevBtn.innerHTML = `
-                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                </svg>
-                Anterior
-            `;
-            prevBtn.disabled = (currentPage === 1);
-            if (currentPage > 1) {
-                prevBtn.onclick = () => goToPage(currentPage - 1);
-            }
-            btnContainer.appendChild(prevBtn);
-
-            // Numbered buttons
-            const maxButtons = 5;
-            let startPage = Math.max(1, currentPage - 2);
-            let endPage = Math.min(totalPages, startPage + maxButtons - 1);
-
-            if (endPage - startPage < maxButtons - 1) {
-                startPage = Math.max(1, endPage - maxButtons + 1);
-            }
-
-            if (startPage > 1) {
-                btnContainer.appendChild(createPageBtn(1));
-                if (startPage > 2) {
-                    const ellipsis = document.createElement('span');
-                    ellipsis.className = 'px-1.5 py-1 text-xs text-gray-400';
-                    ellipsis.textContent = '...';
-                    btnContainer.appendChild(ellipsis);
-                }
-            }
-
-            for (let p = startPage; p <= endPage; p++) {
-                btnContainer.appendChild(createPageBtn(p));
-            }
-
-            if (endPage < totalPages) {
-                if (endPage < totalPages - 1) {
-                    const ellipsis = document.createElement('span');
-                    ellipsis.className = 'px-1.5 py-1 text-xs text-gray-400';
-                    ellipsis.textContent = '...';
-                    btnContainer.appendChild(ellipsis);
-                }
-                btnContainer.appendChild(createPageBtn(totalPages));
-            }
-
-            // Next Button
-            const nextBtn = document.createElement('button');
-            nextBtn.type = 'button';
-            nextBtn.className = `px-3 py-1.5 text-xs font-semibold rounded-md border ${currentPage === totalPages ? 'border-gray-200 text-gray-400 cursor-not-allowed bg-gray-50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-100 cursor-pointer shadow-sm'} transition flex items-center`;
-            nextBtn.innerHTML = `
-                Próximo
-                <svg class="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                </svg>
-            `;
-            nextBtn.disabled = (currentPage === totalPages);
-            if (currentPage < totalPages) {
-                nextBtn.onclick = () => goToPage(currentPage + 1);
-            }
-            btnContainer.appendChild(nextBtn);
-        }
-
-        function syncFilterStorageAndUrl() {
-            const statusSelect = document.getElementById('statusFilter');
-            const scopeSelect = document.getElementById('scopeFilter');
-            const searchInput = document.getElementById('searchInput');
-
-            const statusVal = statusSelect ? statusSelect.value : '';
-            const scopeVal = scopeSelect ? scopeSelect.value : 'all';
-            const searchVal = searchInput ? searchInput.value.trim() : '';
-
-            sessionStorage.setItem(STORAGE_KEY_STATUS, statusVal);
-            sessionStorage.setItem(STORAGE_KEY_SCOPE, scopeVal);
-            sessionStorage.setItem(STORAGE_KEY_SEARCH, searchVal);
-
-            const url = new URL(window.location);
-            if (statusVal) {
-                url.searchParams.set('status', statusVal);
+            let newOrder = 'ASC';
+            if (col === currentSort) {
+                newOrder = (currentOrder === 'ASC') ? 'DESC' : 'ASC';
             } else {
-                url.searchParams.delete('status');
+                newOrder = (col === 'date') ? 'DESC' : 'ASC';
             }
 
-            if (scopeVal && scopeVal !== 'all') {
-                url.searchParams.set('scope', scopeVal);
-            } else {
-                url.searchParams.delete('scope');
-            }
-
-            if (searchVal) {
-                url.searchParams.set('q', searchVal);
-            } else {
-                url.searchParams.delete('q');
-            }
-
-            window.history.replaceState({}, '', url);
+            form.querySelector('input[name="sort"]').value = col;
+            form.querySelector('input[name="order"]').value = newOrder;
+            form.querySelector('input[name="page"]').value = '1';
+            form.submit();
         }
 
-        function onFiltersChanged() {
-            syncFilterStorageAndUrl();
-            currentPage = 1;
-            renderPagination();
+        function goToPage(p) {
+            const form = document.getElementById('clientsFilterForm');
+            form.querySelector('input[name="page"]').value = p;
+            form.submit();
         }
 
-        function initFilters() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const statusSelect = document.getElementById('statusFilter');
-            const scopeSelect = document.getElementById('scopeFilter');
-            const searchInput = document.getElementById('searchInput');
-            const perPageSelect = document.getElementById('perPageSelect');
-
-            // 1. Status Filter:
-            if (urlParams.has('status')) {
-                const st = urlParams.get('status');
-                if (statusSelect) statusSelect.value = st;
-                sessionStorage.setItem(STORAGE_KEY_STATUS, st);
-            } else {
-                const savedStatus = sessionStorage.getItem(STORAGE_KEY_STATUS);
-                if (savedStatus !== null && statusSelect) {
-                    statusSelect.value = savedStatus;
-                }
-            }
-
-            // 2. Scope Filter:
-            if (urlParams.has('scope')) {
-                const sc = urlParams.get('scope');
-                if (scopeSelect) scopeSelect.value = sc;
-                sessionStorage.setItem(STORAGE_KEY_SCOPE, sc);
-            } else {
-                const savedScope = sessionStorage.getItem(STORAGE_KEY_SCOPE);
-                if (savedScope !== null && scopeSelect) {
-                    scopeSelect.value = savedScope;
-                }
-            }
-
-            // 3. Search Text:
-            if (urlParams.has('q')) {
-                const q = urlParams.get('q');
-                if (searchInput) searchInput.value = q;
-                sessionStorage.setItem(STORAGE_KEY_SEARCH, q);
-            } else {
-                const savedSearch = sessionStorage.getItem(STORAGE_KEY_SEARCH);
-                if (savedSearch !== null && searchInput) {
-                    searchInput.value = savedSearch;
-                }
-            }
-
-            // 4. Per Page:
-            const savedPerPage = sessionStorage.getItem(STORAGE_KEY_PER_PAGE);
-            if (savedPerPage !== null && perPageSelect) {
-                perPageSelect.value = savedPerPage;
-                perPage = savedPerPage;
-            }
-
-            // Update URL to match current restored state
-            syncFilterStorageAndUrl();
+        function changePerPage(val) {
+            const form = document.getElementById('clientsFilterForm');
+            document.getElementById('perPageHidden').value = val;
+            form.querySelector('input[name="page"]').value = '1';
+            form.submit();
         }
 
-        document.querySelectorAll('.sort-header').forEach(header => {
-            header.addEventListener('click', function () {
-                const col = this.getAttribute('data-sort');
-                let newOrder = 'ASC';
-                if (col === currentSort) {
-                    newOrder = currentOrder === 'ASC' ? 'DESC' : 'ASC';
-                } else {
-                    newOrder = col === 'date' ? 'DESC' : 'ASC';
-                }
-                sortTable(col, newOrder);
-            });
+        // Live Search com Debounce de 450ms
+        document.getElementById('searchInput')?.addEventListener('input', function() {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                submitFilterForm();
+            }, 450);
         });
-
-        document.getElementById('searchInput')?.addEventListener('input', onFiltersChanged);
-        document.getElementById('statusFilter')?.addEventListener('change', onFiltersChanged);
-        document.getElementById('scopeFilter')?.addEventListener('change', onFiltersChanged);
-        document.getElementById('perPageSelect')?.addEventListener('change', function () {
-            perPage = this.value;
-            sessionStorage.setItem(STORAGE_KEY_PER_PAGE, perPage);
-            currentPage = 1;
-            renderPagination();
-        });
-
-        // Initialize state, sort icons and pagination on load
-        initFilters();
-        updateSortIcons();
-        renderPagination();
-
-        // Reveal fully-ready table and dismiss loading overlay
-        const tableEl = document.getElementById('clientsTable');
-        if (tableEl) tableEl.classList.add('ready');
-        const overlayEl = document.getElementById('clientsLoadingOverlay');
-        if (overlayEl) {
-            overlayEl.classList.add('opacity-0', 'pointer-events-none');
-            setTimeout(() => overlayEl.remove(), 250);
-        }
     </script>
 </body>
 

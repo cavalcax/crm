@@ -130,7 +130,9 @@
     // ==========================================
     // GLOBAL LOADING OVERLAY CONTROLLER
     // ==========================================
-    window.showLoading = function(title = "Carregando dados...", subtitle = "Por favor, aguarde um instante") {
+    let globalLoadingTimeout = null;
+
+    window.showLoading = function(title = "Carregando dados...", subtitle = "Por favor, aguarde um instante", maxWaitMs = 6000) {
         const overlay = document.getElementById('globalLoadingOverlay');
         if (!overlay) return;
         const titleEl = document.getElementById('globalLoadingTitle');
@@ -138,17 +140,34 @@
         if (titleEl) titleEl.textContent = title;
         if (subEl) subEl.textContent = subtitle;
         overlay.classList.remove('opacity-0', 'pointer-events-none');
+
+        // Limpa timeout anterior se houver
+        if (globalLoadingTimeout) clearTimeout(globalLoadingTimeout);
+
+        // Trava de segurança: fecha automaticamente caso a página demore ou seja cancelada
+        globalLoadingTimeout = setTimeout(() => {
+            window.hideLoading();
+        }, maxWaitMs);
     };
 
     window.hideLoading = function() {
+        if (globalLoadingTimeout) clearTimeout(globalLoadingTimeout);
         const overlay = document.getElementById('globalLoadingOverlay');
         if (!overlay) return;
         overlay.classList.add('opacity-0', 'pointer-events-none');
     };
 
-    // Auto-attach loading indicator to filter/search forms
+    // Auto-oculta o loading quando a página é restaurada do cache (bfcache) ou ao voltar no navegador
+    window.addEventListener('pageshow', () => window.hideLoading());
+    window.addEventListener('popstate', () => window.hideLoading());
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') window.hideLoading();
+    });
+
+    // Auto-attach loading indicator apenas a formulários de filtro reais
     document.addEventListener('DOMContentLoaded', () => {
-        document.querySelectorAll('form[data-loading="true"], form.filter-form').forEach(form => {
+        window.hideLoading();
+        document.querySelectorAll('form[data-loading="true"]').forEach(form => {
             form.addEventListener('submit', () => {
                 window.showLoading('Aplicando filtros...', 'Atualizando dados da lista');
             });
@@ -156,7 +175,7 @@
     });
 
     // ==========================================
-    // SIDEBAR & BROWSER BACK BUTTON CONTROLLER
+    // SIDEBAR & MOBILE CONTROLLER
     // ==========================================
     const sidebar = document.getElementById('sidebar');
     const sidebarBtn = document.getElementById('sidebarBtn');
@@ -179,34 +198,19 @@
         }
     });
 
-    // Intercept Browser / Smartphone Back Button
-    // 1. Closes open mobile menu instead of leaving the page
-    // 2. Closes open SweetAlert modals
-    // 3. Closes notification dropdown
-    // 4. Traps navigation to avoid POST resubmission error screens
-    if (window.history && window.history.pushState) {
-        window.history.pushState(null, "", window.location.href);
-
-        window.addEventListener('popstate', function(event) {
-            // Check 1: SweetAlert modal open
-            if (typeof Swal !== 'undefined' && Swal.isVisible()) {
-                Swal.close();
-            }
-
-            // Check 2: Mobile Sidebar open -> close it
-            if (sidebar && !sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) {
-                sidebar.classList.add('-translate-x-full');
-            }
-
-            // Check 3: Notification Dropdown open -> close it
-            if (typeof notifDropdown !== 'undefined' && notifDropdown && !notifDropdown.classList.contains('hidden')) {
-                notifDropdown.classList.add('hidden');
-            }
-
-            // Keep user on current page to avoid POST resubmission / error screens
-            window.history.pushState(null, "", window.location.href);
-        });
-    }
+    // Close open menus/modals on popstate without trapping history
+    window.addEventListener('popstate', function(event) {
+        if (typeof Swal !== 'undefined' && Swal.isVisible()) {
+            Swal.close();
+        }
+        if (sidebar && !sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) {
+            sidebar.classList.add('-translate-x-full');
+        }
+        if (typeof notifDropdown !== 'undefined' && notifDropdown && !notifDropdown.classList.contains('hidden')) {
+            notifDropdown.classList.add('hidden');
+        }
+        window.hideLoading();
+    });
 
     // Global helper for delete confirmation
     function confirmDelete(event) {

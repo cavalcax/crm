@@ -37,8 +37,9 @@ $milk_max_num = (int)preg_replace('/\D/', '', $raw_milk_max);
 
 // Build dynamic query for clients
 $query = "
-    SELECT DISTINCT c.* 
+    SELECT DISTINCT c.*, u.name as operator_name 
     FROM " . TABLE_NAME . "clients c 
+    LEFT JOIN " . TABLE_NAME . "users u ON c.user_id = u.id
     LEFT JOIN " . TABLE_NAME . "intentions i ON i.client_id = c.id AND (i.status = 'active' OR i.status IS NULL)
     WHERE c.user_id = :user_id
 ";
@@ -613,10 +614,21 @@ $activeFilterCount = count($status_filters) + count($uf_filters) + count($breed_
                                                         </button>
 
                                                         <div>
-                                                            <a href="client-details.php?id=<?php echo $client['id']; ?>" target="_blank"
-                                                               class="text-gray-900 font-bold hover:text-brand-600 hover:underline client-name">
-                                                                <?php echo htmlspecialchars($client['name']); ?>
-                                                            </a>
+                                                            <div class="flex items-center gap-1.5 flex-wrap">
+                                                                <a href="client-details.php?id=<?php echo $client['id']; ?>" target="_blank"
+                                                                   class="text-gray-900 font-bold hover:text-brand-600 hover:underline client-name">
+                                                                    <?php echo htmlspecialchars($client['name']); ?>
+                                                                </a>
+                                                                <?php if ((int)($client['user_id'] ?? 0) !== (int)$user_id): ?>
+                                                                    <span class="inline-flex items-center justify-center text-red-500 hover:text-red-700 transition shrink-0 select-none" title="Cliente de outro usuário (Responsável: <?php echo htmlspecialchars($client['operator_name'] ?? 'Outro Usuário'); ?>)">
+                                                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                                                            <circle cx="9" cy="7" r="4"></circle>
+                                                                            <line x1="3" y1="3" x2="21" y2="21" stroke-width="2.5"></line>
+                                                                        </svg>
+                                                                    </span>
+                                                                <?php endif; ?>
+                                                            </div>
                                                             <?php if (!empty($client['farm_name'])): ?>
                                                                 <p class="text-xs text-brand-900 font-medium client-farm mt-0.5">
                                                                     🏡 <?php echo htmlspecialchars($client['farm_name']); ?>
